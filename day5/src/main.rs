@@ -11,10 +11,24 @@ fn main() {
         .map(|word| word.unwrap().parse::<i32>().unwrap())
         .collect::<Vec<i32>>();
 
-    println!("Steps: {:?}", count_steps(&mut list));
+    let mut copy_list = list.clone();
+
+    println!(
+        "Steps version one: {:?}",
+        count_steps(&mut list, Version::One)
+    );
+    println!(
+        "Steps version two: {:?}",
+        count_steps(&mut copy_list, Version::Two)
+    );
 }
 
-fn count_steps(list: &mut [i32]) -> i32 {
+#[derive(Debug, PartialEq)]
+enum Version {
+    One,
+    Two,
+}
+fn count_steps(list: &mut [i32], ver: Version) -> i32 {
     let mut curr_pos = 0;
     let mut no_steps = 1;
     let len = list.len();
@@ -25,7 +39,11 @@ fn count_steps(list: &mut [i32]) -> i32 {
         {
             let last_pos = curr_pos;
             curr_pos += list[curr_pos as usize];
-            list[last_pos as usize] += 1;
+            if ver == Version::Two && list[last_pos as usize] >= 3 {
+                list[last_pos as usize] -= 1;
+            } else {
+                list[last_pos as usize] += 1;
+            }
             no_steps += 1;
         } else {
             break;
