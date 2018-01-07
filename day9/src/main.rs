@@ -17,11 +17,31 @@ fn main() {
             .chars()
             .filter(|&c| c != ',')
             .collect::<String>();
-        println!("Group: {:?}", clean_garbage);
         println!("Group score is: {:?}", count_group_score(&clean_garbage));
+        println!("Garbage length is: {:?}", count_garbage_chars(&clean_chars));
     }
 }
 
+fn count_garbage_chars(group: &str) -> i32 {
+    group
+        .chars()
+        .fold((String::new(), false, 0), |mut acc, c| {
+            if c == '<' && !acc.1 {
+                acc.1 = true;
+                acc.2 -= 1;
+            }
+            if acc.1 {
+                acc.2 += 1;
+            }
+
+            if c == '>' && acc.1 {
+                acc.1 = false;
+                acc.2 -= 1;
+            }
+            acc
+        })
+        .2
+}
 fn remove_garbage_chars(group: &str) -> String {
     group
         .chars()
