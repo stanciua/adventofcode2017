@@ -111,14 +111,13 @@ fn main() {
         instructions.push(instruction(line.as_bytes()).unwrap().1);
     }
 
-
     println!(
-        "Largest value in any register is: {:?}",
-        get_the_largest_val_in_any_reg_from(instructions.as_slice())
+        "Largest and max value in any register is: {:?}",
+        get_largest_and_max_value_in_the_register(instructions.as_slice())
     );
 }
 
-fn get_the_largest_val_in_any_reg_from(instructions: &[Instruction]) -> i32 {
+fn get_largest_and_max_value_in_the_register(instructions: &[Instruction]) -> (i32, i32) {
     let mut registers = instructions.iter().map(|i| i.register).fold(
         HashMap::new(),
         |mut acc, r| {
@@ -127,6 +126,7 @@ fn get_the_largest_val_in_any_reg_from(instructions: &[Instruction]) -> i32 {
         },
     );
 
+    let mut max = 0;
     for instruction in instructions {
         // Evaluate the condition and see if this instruction is needed to be run or not
         let execute = match instruction.condition.1 {
@@ -146,8 +146,14 @@ fn get_the_largest_val_in_any_reg_from(instructions: &[Instruction]) -> i32 {
                 Operation::Dec => *old_val -= instruction.amount,
                 Operation::Inc => *old_val += instruction.amount,
             }
+            if *old_val > max {
+                max = *old_val;
+            }
         }
     }
 
-    *registers.iter().max_by(|x, y| x.1.cmp(y.1)).unwrap().1
+    (
+        *registers.iter().max_by(|x, y| x.1.cmp(y.1)).unwrap().1,
+        max,
+    )
 }
