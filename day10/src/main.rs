@@ -1,22 +1,64 @@
+#![feature(inclusive_range_syntax)]
+
 use std::str;
 use std::fs::File;
 use std::io::Read;
 
-// The list begins as [0] 1 2 3 4 (where square brackets indicate the current position).
-// The first length, 3, selects ([0] 1 2) 3 4 (where parentheses indicate the sublist to be reversed).
-// After reversing that section (0 1 2 into 2 1 0), we get ([2] 1 0) 3 4.
-// Then, the current position moves forward by the length, 3, plus the skip size, 0: 2 1 0 [3] 4. Finally, the skip size increases to 1.
+fn get_result_of_multiply_first_two_num(input: &str) -> i32 {
+    let lengths = input
+        .split(',')
+        .map(|s| str::parse::<u8>(s).unwrap())
+        .collect::<Vec<_>>();
 
-// The second length, 4, selects a section which wraps: 2 1) 0 ([3] 4.
-// The sublist 3 4 2 1 is reversed to form 1 2 4 3: 4 3) 0 ([1] 2.
-// The current position moves forward by the length plus the skip size, a total of 5, causing it not to move because it wraps around: 4 3 0 [1] 2. The skip size increases to 2.
+    let mut list = (0u8..=255).collect::<Vec<_>>();
+    let mut curr_pos = 0;
+    let mut skip_size = 0;
 
-// The third length, 1, selects a sublist of a single element, and so reversing it has no effect.
-// The current position moves forward by the length (1) plus the skip size (2): 4 [3] 0 1 2. The skip size increases to 3.
+    run_iteration(
+        list.as_mut_slice(),
+        lengths.as_slice(),
+        &mut curr_pos,
+        &mut skip_size,
+    );
+    list.iter()
+        .cloned()
+        .take(2)
+        .map(|v| v as i32)
+        .product::<i32>()
+}
 
-// The fourth length, 5, selects every element starting with the second: 4) ([3] 0 1 2. Reversing this sublist (3 0 1 2 4 into 4 2 1 0 3) produces: 3) ([4] 2 1 0.
-// Finally, the current position moves forward by 8: 3 4 2 1 [0]. The skip size increases to 4.
+fn get_hasher_from_input(input: &str) -> String {
+    let mut lengths = input.as_bytes().iter().cloned().collect::<Vec<_>>();
+    lengths.extend(vec![17u8, 31, 73, 47, 23]);
 
+    let mut curr_pos = 0;
+    let mut skip_size = 0;
+    let mut sparse_hash = (0..=255).into_iter().collect::<Vec<_>>();
+
+    for _ in 0..64 {
+        run_iteration(
+            sparse_hash.as_mut_slice(),
+            lengths.as_slice(),
+            &mut curr_pos,
+            &mut skip_size,
+        );
+    }
+
+    let mut dense_hash = Vec::new();
+    for slice in sparse_hash.chunks(16) {
+        dense_hash.push(slice.iter().fold(0, |mut acc, v| {
+            acc ^= v;
+            acc
+        }));
+    }
+    dense_hash
+        .iter()
+        .map(|v| format!("{:02x}", v))
+        .fold(String::new(), |mut acc, v| {
+            acc.extend(v.chars());
+            acc
+        })
+}
 fn main() {
     let path = "input.txt";
     let mut input = File::open(path).expect("Unable to open file!");
@@ -26,27 +68,24 @@ fn main() {
         Ok(n) => println!("Read {} bytes", n),
     }
 
-    let lengths = input_txt
-        .split(',')
-        .map(|s| str::parse::<i32>(s).unwrap())
-        .collect::<Vec<_>>();
-
     println!(
         "Result is: {:?}",
-        get_result(&mut (0..256).collect::<Vec<_>>(), lengths.as_slice()),
+        get_result_of_multiply_first_two_num(&input_txt)
     );
+
+    println!("Knot hash is: {:?}", get_hasher_from_input(&input_txt));
 }
 
-fn get_result(list: &mut [i32], lengths: &[i32]) -> i32 {
+fn run_iteration(list: &mut [u8], lengths: &[u8], curr_pos: &mut usize, skip_size: &mut usize) {
     let len = list.len();
     lengths
         .iter()
-        .fold((list, 0i32, 0i32), |mut state, &n| {
+        .fold((list, curr_pos, skip_size), |state, &n| {
             let sublist = state
                 .0
                 .iter()
                 .cycle()
-                .skip(state.1 as usize)
+                .skip(*state.1 as usize)
                 .take(len)
                 .cloned()
                 .collect::<Vec<_>>();
@@ -59,24 +98,14 @@ fn get_result(list: &mut [i32], lengths: &[i32]) -> i32 {
                 .cloned()
                 .rev()
                 .collect::<Vec<_>>();
-            rev_sublist.extend(
-                sublist
-                    .into_iter()
-                    .skip(n as usize)
-                    .take(len - n as usize)
-                    .collect::<Vec<_>>(),
-            );
+            rev_sublist.extend(sublist.into_iter().skip(n as usize).take(len - n as usize));
 
             for (idx, e) in rev_sublist.into_iter().enumerate() {
-                state.0[(state.1 as usize + idx) % len] = e;
+                state.0[(*state.1 + idx) % len] = e;
             }
 
-            state.1 += n + state.2;
-            state.2 += 1;
+            *state.1 = (*state.1 + n as usize + *state.2) % len;
+            *state.2 = (*state.2 + 1) % len;
             state
-        })
-        .0
-        .iter()
-        .take(2)
-        .product()
+        });
 }
