@@ -15,46 +15,69 @@ fn main() {
         "The minimum number of steps is: {:?}",
         get_no_of_steps(&hexes)
     );
+    println!(
+        "The maximum distance is: {:?}",
+        get_the_max_distance(&hexes)
+    );
 }
 
+fn get_new_coordinate(curr_coordinate: (i32, i32, i32), hex: &str) -> (i32, i32, i32) {
+    match hex {
+        "n" => (
+            curr_coordinate.0,
+            curr_coordinate.1 + 1,
+            curr_coordinate.2 - 1,
+        ),
+        "ne" => (
+            curr_coordinate.0 + 1,
+            curr_coordinate.1,
+            curr_coordinate.2 - 1,
+        ),
+        "se" => (
+            curr_coordinate.0 + 1,
+            curr_coordinate.1 - 1,
+            curr_coordinate.2,
+        ),
+        "s" => (
+            curr_coordinate.0,
+            curr_coordinate.1 - 1,
+            curr_coordinate.2 + 1,
+        ),
+        "sw" => (
+            curr_coordinate.0 - 1,
+            curr_coordinate.1,
+            curr_coordinate.2 + 1,
+        ),
+        "nw" => (
+            curr_coordinate.0 - 1,
+            curr_coordinate.1 + 1,
+            curr_coordinate.2,
+        ),
+        _ => panic!("invalid input received"),
+    }
+}
+
+fn get_the_max_distance(hexes: &[&str]) -> i32 {
+    let start_coordinate = (0i32, 0i32, 0i32);
+    let mut curr_coordinate = start_coordinate;
+
+    let mut distances = Vec::new();
+    for hex in hexes {
+        curr_coordinate = get_new_coordinate(curr_coordinate, hex);
+        distances.push(
+            ((start_coordinate.0 - curr_coordinate.0).abs()
+                + (start_coordinate.1 - curr_coordinate.1).abs()
+                + (start_coordinate.2 - curr_coordinate.2).abs()) / 2,
+        );
+    }
+    *distances.iter().max().unwrap()
+}
 fn get_no_of_steps(hexes: &[&str]) -> i32 {
     let start_coordinate = (0i32, 0i32, 0i32);
     let mut curr_coordinate = start_coordinate;
 
     for hex in hexes {
-        curr_coordinate = match *hex {
-            "n" => (
-                curr_coordinate.0,
-                curr_coordinate.1 + 1,
-                curr_coordinate.2 - 1,
-            ),
-            "ne" => (
-                curr_coordinate.0 + 1,
-                curr_coordinate.1,
-                curr_coordinate.2 - 1,
-            ),
-            "se" => (
-                curr_coordinate.0 + 1,
-                curr_coordinate.1 - 1,
-                curr_coordinate.2,
-            ),
-            "s" => (
-                curr_coordinate.0,
-                curr_coordinate.1 - 1,
-                curr_coordinate.2 + 1,
-            ),
-            "sw" => (
-                curr_coordinate.0 - 1,
-                curr_coordinate.1,
-                curr_coordinate.2 + 1,
-            ),
-            "nw" => (
-                curr_coordinate.0 - 1,
-                curr_coordinate.1 + 1,
-                curr_coordinate.2,
-            ),
-            _ => panic!("invalid input received"),
-        }
+        curr_coordinate = get_new_coordinate(curr_coordinate, hex);
     }
 
     ((start_coordinate.0 - curr_coordinate.0).abs() + (start_coordinate.1 - curr_coordinate.1).abs()
