@@ -44,18 +44,45 @@ fn main() {
 
     println!(
         "Number of programs connected to program `0` is: {:?}",
-        get_num_of_programs(&programs)
+        get_connected_programs(0, &programs).len()
     );
+    println!("Number of groups: {:?}", get_num_of_groups(&programs));
 }
 
+fn get_num_of_groups(programs: &[HashSet<i32>]) -> i32 {
+    let mut remaining_progs = (0i32..programs.len() as i32)
+        .into_iter()
+        .collect::<HashSet<_>>();
+
+    remaining_progs = remaining_progs
+        .difference(&get_connected_programs(0, &programs))
+        .cloned()
+        .collect::<HashSet<_>>();
+
+    let mut groups = 1;
+    while remaining_progs.len() != 0 {
+        let prog_id = *remaining_progs.iter().take(1).next().unwrap();
+        let connected_progrs = get_connected_programs(prog_id, &programs);
+        remaining_progs = remaining_progs
+            .difference(&connected_progrs)
+            .cloned()
+            .collect::<HashSet<_>>();
+        remaining_progs.remove(&prog_id);
+        groups += 1;
+    }
+    groups
+}
 // we can use a tree to do this, an extra dependency should be added
-fn get_num_of_programs(programs: &[HashSet<i32>]) -> i32 {
+fn get_connected_programs(program: i32, programs: &[HashSet<i32>]) -> HashSet<i32> {
     // Tracks already visited programs
     let mut seen_programs = HashSet::new();
     // We start tracking with program 0
-    seen_programs.insert(0);
-    // Holds all the programs that communicate up to program 0
-    let mut conn_progs = programs[0].iter().cloned().collect::<HashSet<_>>();
+    seen_programs.insert(program);
+    // Holds all the programs that communicate up to program `program`
+    let mut conn_progs = programs[program as usize]
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
     conn_progs.extend(seen_programs.iter());
 
     loop {
@@ -74,5 +101,5 @@ fn get_num_of_programs(programs: &[HashSet<i32>]) -> i32 {
             break;
         }
     }
-    conn_progs.len() as i32
+    conn_progs
 }
