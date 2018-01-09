@@ -5,7 +5,7 @@ use std::str;
 use nom::{digit, space};
 use std::fs::File;
 use std::io::Read;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 named!(
     depth<i32>,
@@ -41,8 +41,33 @@ fn main() {
         "The trip severity is: {:?}",
         get_trip_severity(&mut firewall_policy)
     );
-}
+    let mut firewall_policy = HashMap::new();
+    for line in input_txt.lines() {
+        let (k, v) = firewall(line.as_bytes()).unwrap().1;
+        firewall_policy.insert(k, v);
+    }
 
+    println!(
+        "The fewest number of steps is: {:?}",
+        get_the_fewest_number_of_steps(&mut firewall_policy)
+    );
+}
+fn get_the_fewest_number_of_steps(firewall: &mut HashMap<i32, i32>) -> i32 {
+    let total_picoseconds = firewall.keys().cloned().max().unwrap();
+    for ps in 0..total_picoseconds + 1 {
+        firewall.entry(ps).or_insert(1);
+    }
+    let max_steps = firewall
+        .values()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .map(|v| *v as u64)
+        .inspect(|x| println!("{}", x))
+        .product::<u64>();
+    println!("{}", max_steps);
+
+    0
+}
 fn get_trip_severity(firewall: &mut HashMap<i32, i32>) -> i32 {
     let mut trip_severity = 0;
     let total_picoseconds = firewall.keys().cloned().max().unwrap();

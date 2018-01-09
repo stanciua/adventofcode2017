@@ -75,7 +75,7 @@ fn get_num_of_groups(programs: &[HashSet<i32>]) -> i32 {
 fn get_connected_programs(program: i32, programs: &[HashSet<i32>]) -> HashSet<i32> {
     // Tracks already visited programs
     let mut seen_programs = HashSet::new();
-    // We start tracking with program 0
+    // We start tracking with program `program`
     seen_programs.insert(program);
     // Holds all the programs that communicate up to program `program`
     let mut conn_progs = programs[program as usize]
