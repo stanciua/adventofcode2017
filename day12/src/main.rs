@@ -67,7 +67,6 @@ fn get_num_of_groups(programs: &[HashSet<i32>]) -> i32 {
             .difference(&connected_progrs)
             .cloned()
             .collect::<HashSet<_>>();
-        remaining_progs.remove(&prog_id);
         groups += 1;
     }
     groups
