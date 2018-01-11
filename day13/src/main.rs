@@ -1,3 +1,4 @@
+#![feature(inclusive_range_syntax)]
 #[macro_use]
 extern crate nom;
 
@@ -5,7 +6,7 @@ use std::str;
 use nom::{digit, space};
 use std::fs::File;
 use std::io::Read;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 named!(
     depth<i32>,
@@ -31,57 +32,107 @@ fn main() {
         Ok(n) => println!("Read {} bytes", n),
     }
 
-    let mut firewall_policy = HashMap::new();
+    let mut firewall_map = HashMap::new();
     for line in input_txt.lines() {
         let (k, v) = firewall(line.as_bytes()).unwrap().1;
-        firewall_policy.insert(k, v);
+        firewall_map.insert(k, v);
     }
 
-    println!(
-        "The trip severity is: {:?}",
-        get_trip_severity(&mut firewall_policy)
+    let total_picoseconds = firewall_map.keys().cloned().max().unwrap();
+
+    let firewall = firewall_map.iter().fold(
+        vec![0; total_picoseconds as usize + 1],
+        |mut acc, v| {
+            acc[*v.0 as usize] = *v.1;
+            acc
+        },
     );
-    let mut firewall_policy = HashMap::new();
-    for line in input_txt.lines() {
-        let (k, v) = firewall(line.as_bytes()).unwrap().1;
-        firewall_policy.insert(k, v);
-    }
+
+    let firewall = firewall
+        .into_iter()
+        .map(|v| {
+            (0..v - 1)
+                .into_iter()
+                .chain((1..=v - 1).into_iter().rev())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    // println!("{:?}", firewall);
+    // println!(
+    //     "The trip severity is: {:?}",
+    //     get_trip_severity(0, &firewall)
+    // );
 
     println!(
         "The fewest number of steps is: {:?}",
-        get_the_fewest_number_of_steps(&mut firewall_policy)
+        get_the_fewest_number_of_steps(firewall.as_slice())
     );
 }
-fn get_the_fewest_number_of_steps(firewall: &mut HashMap<i32, i32>) -> i32 {
-    let total_picoseconds = firewall.keys().cloned().max().unwrap();
-    for ps in 0..total_picoseconds + 1 {
-        firewall.entry(ps).or_insert(1);
-    }
-    let max_steps = firewall
-        .values()
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .map(|v| *v as u64)
-        .inspect(|x| println!("{}", x))
-        .product::<u64>();
-    println!("{}", max_steps);
 
-    0
+fn get_the_fewest_number_of_steps(firewall: &[Vec<i32>]) -> usize {
+    let mut delay = 0;
+    let mut caught = get_trip_severity_two(delay, firewall);
+    while caught.0 {
+        delay += 1;
+        caught = get_trip_severity_two(delay, firewall);
+    }
+
+    delay
 }
-fn get_trip_severity(firewall: &mut HashMap<i32, i32>) -> i32 {
+
+fn get_trip_severity(delay: usize, firewall: &[Vec<i32>]) -> (bool, usize) {
     let mut trip_severity = 0;
-    let total_picoseconds = firewall.keys().cloned().max().unwrap();
-    for ps in 0..total_picoseconds + 1 {
-        let depth = ps;
-        let &mut range = firewall.entry(ps).or_insert(0);
-        if range == 0 {
+    let mut caught = false;
+    for (depth, ref ranges) in firewall.iter().enumerate() {
+        if ranges.len() == 0 {
             continue;
         }
-        let scanner_pos = if ps > range - 1 { ps % (range - 1) } else { ps };
-        if scanner_pos == 0 {
+        let offset = (depth + delay) as usize;
+        let scanner_pos = ranges
+            .into_iter()
+            .cycle()
+            .skip(offset)
+            .take(1)
+            .next()
+            .unwrap();
+
+        if *scanner_pos == 0 {
             // we get caught by the scanner, we are at the top
-            trip_severity += depth * range;
+            trip_severity += depth * range as usize;
+            caught = true;
         }
     }
-    trip_severity
+
+    (caught, trip_severity)
+}
+
+fn get_trip_severity_two(delay: usize, firewall: &[Vec<i32>]) -> (bool, usize) {
+    println!("----------Delay: {} --------------", delay);
+
+    let mut trip_severity = 0;
+    let mut caught = false;
+    for (depth, ref ranges) in firewall.iter().enumerate() {
+        println!("Depth: {:?}", depth);
+
+        if ranges.len() == 0 {
+            println!("------------------------------");
+            continue;
+        }
+        let offset = (depth + delay) as usize;
+        println!("Offset: {}", offset);
+        let scanner_pos = ranges.iter().cycle().skip(offset).take(1).next().unwrap();
+
+        println!("Scanner Position: {}", scanner_pos);
+        if *scanner_pos == 0 {
+            // we get caught by the scanner, we are at the top
+            trip_severity += depth * range as usize;
+            println!("Caught");
+            caught = true;
+            break;
+        }
+        println!("------------------------------");
+    }
+
+    (caught, trip_severity)
 }
