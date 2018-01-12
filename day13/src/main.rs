@@ -23,6 +23,12 @@ named!(
     do_parse!(d: depth >> char!(':') >> space >> r: range >> (d, r))
 );
 
+#[derive(Debug, Eq, PartialEq)]
+enum Day {
+    One,
+    Two,
+}
+
 fn main() {
     let path = "input.txt";
     let mut input = File::open(path).expect("Unable to open file!");
@@ -48,21 +54,10 @@ fn main() {
         },
     );
 
-    let firewall = firewall
-        .into_iter()
-        .map(|v| {
-            (0..v - 1)
-                .into_iter()
-                .chain((1..=v - 1).into_iter().rev())
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-
-    // println!("{:?}", firewall);
-    // println!(
-    //     "The trip severity is: {:?}",
-    //     get_trip_severity(0, &firewall)
-    // );
+    println!(
+        "The trip severity is: {:?}",
+        get_trip_severity(Day::One, 0, &firewall).1
+    );
 
     println!(
         "The fewest number of steps is: {:?}",
@@ -70,69 +65,36 @@ fn main() {
     );
 }
 
-fn get_the_fewest_number_of_steps(firewall: &[Vec<i32>]) -> usize {
+fn get_the_fewest_number_of_steps(firewall: &[i32]) -> usize {
     let mut delay = 0;
-    let mut caught = get_trip_severity_two(delay, firewall);
+
+    let mut caught = get_trip_severity(Day::Two, delay, firewall);
+
     while caught.0 {
         delay += 1;
-        caught = get_trip_severity_two(delay, firewall);
+        caught = get_trip_severity(Day::Two, delay, firewall);
     }
 
     delay
 }
 
-fn get_trip_severity(delay: usize, firewall: &[Vec<i32>]) -> (bool, usize) {
+fn get_trip_severity(day: Day, delay: usize, firewall: &[i32]) -> (bool, usize) {
     let mut trip_severity = 0;
     let mut caught = false;
-    for (depth, ref ranges) in firewall.iter().enumerate() {
-        if ranges.len() == 0 {
+    for (depth, range) in firewall.iter().enumerate() {
+        if *range == 0 {
             continue;
         }
-        let offset = (depth + delay) as usize;
-        let scanner_pos = ranges
-            .into_iter()
-            .cycle()
-            .skip(offset)
-            .take(1)
-            .next()
-            .unwrap();
-
-        if *scanner_pos == 0 {
+        let scanner_pos = (depth + delay) % ((*range as usize - 1) * 2);
+        if scanner_pos == 0 {
             // we get caught by the scanner, we are at the top
-            trip_severity += depth * range as usize;
+            trip_severity += depth * *range as usize;
             caught = true;
+
+            if day == Day::Two {
+                break;
+            }
         }
     }
-
-    (caught, trip_severity)
-}
-
-fn get_trip_severity_two(delay: usize, firewall: &[Vec<i32>]) -> (bool, usize) {
-    println!("----------Delay: {} --------------", delay);
-
-    let mut trip_severity = 0;
-    let mut caught = false;
-    for (depth, ref ranges) in firewall.iter().enumerate() {
-        println!("Depth: {:?}", depth);
-
-        if ranges.len() == 0 {
-            println!("------------------------------");
-            continue;
-        }
-        let offset = (depth + delay) as usize;
-        println!("Offset: {}", offset);
-        let scanner_pos = ranges.iter().cycle().skip(offset).take(1).next().unwrap();
-
-        println!("Scanner Position: {}", scanner_pos);
-        if *scanner_pos == 0 {
-            // we get caught by the scanner, we are at the top
-            trip_severity += depth * range as usize;
-            println!("Caught");
-            caught = true;
-            break;
-        }
-        println!("------------------------------");
-    }
-
     (caught, trip_severity)
 }
