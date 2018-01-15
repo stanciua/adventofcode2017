@@ -74,95 +74,44 @@ fn get_no_regions(disk: &[String]) -> usize {
     }
     // insert regions inside disk data
     let mut region = 1;
-    // for i in 0..disk_bin.len() {
-    //     for j in 0..disk_bin[i].len() {
-    //         if disk_bin[i][j] == -1 {
-    //             if let Some(r) = get_surround_region(i, j, &disk_bin) {
-    //                 set_adjacent_squares_region(i, j, &mut disk_bin, r);
-    //             } else {
-    //                 set_adjacent_squares_region(i, j, &mut disk_bin, region);
-    //                 region += 1;
-    //             }
-    //         }
-    //     }
-    // }
+    let mut found_square = true;
+    while found_square {
+        for i in 0..disk_bin.len() {
+            for j in 0..disk_bin[i].len() {
+                if disk_bin[i][j] == -1 {
+                    if let Some(reg) = get_surround_region(&disk_bin, i, j) {
+                        disk_bin[i][j] = reg;
+                    } else {
+                        disk_bin[i][j] = region;
+                        region += 1;
+                    }
+                }
+                if i == disk_bin.len() - 1 && j == disk_bin.len() - 1 {
+                    found_square = false;
+                }
+            }
+        }
+    }
 
-    // for i in 0..32 {
-    //     for j in 0..32 {
-    //         print!("{},", disk_bin[i][j]);
-    //     }
-    //     println!();
-    // }
+    for i in 0..32 {
+        for j in 0..32 {
+            print!("{}:{},", j, disk_bin[i][j]);
+        }
+        println!();
+    }
     region as usize
 }
-fn destination_reached(disk: &[Vec<i32>], i: usize, j: usize) -> bool {
-    let mut dead_end = true;
-    if i as i32 - 1 >= 0 && disk[i - 1][j] == -1 {
-        dead_end = false;
-    }
-    if i as i32 + 1 < disk.len() as i32 && disk[i + 1][j] == -1 {
-        dead_end = false;
-    }
-    if j as i32 - 1 >= 0 && disk[i][j - 1] == -1 {
-        dead_end = false;
-    }
-    if j as i32 + 1 < disk.len() as i32 && disk[i][j + 1] == -1 {
-        dead_end = false;
-    }
-    dead_end
-}
-fn bt(disk: &[Vec<i32>], c: (usize, usize), solution: &mut Vec<(usize, usize)>) {
-    if destination_reached(disk, c.0, c.1) {
-        return;
-    }
-    solution.push(c);
-}
-// If destination is reached
-//     print the solution matrix
-// Else
-//    a) Mark current cell in solution matrix as 1.
-//    b) Move forward in horizontal direction and recursively check if this
-//        move leads to a solution.
-//    c) If the move chosen in the above step doesn't lead to a solution
-//        then move down and check if  this move leads to a solution.
-//    d) If none of the above solutions work then unmark this cell as 0
-//        (BACKTRACK) and return false.
 
-// fn set_adjacent_squares_region(i: usize, j: usize, disk: &mut [Vec<i32>], region: i32) {
-//     if i as i32 - 1 >= 0 && disk[i - 1][j] == -1 {
-//         disk[i - 1][j] = region;
-//     }
-//     if i as i32 + 1 < disk.len() as i32 && disk[i + 1][j] == -1 {
-//         disk[i + 1][j] = region;
-//     }
-//     if j as i32 - 1 >= 0 && disk[i][j - 1] == -1 {
-//         disk[i][j - 1] = region;
-//     }
-//     if j as i32 + 1 < disk.len() as i32 && disk[i][j + 1] == -1 {
-//         disk[i][j + 1] = region;
-//     }
-//     // and also set the current position region
-//     disk[i][j] = region;
-// }
-// fn get_surround_region(i: usize, j: usize, disk: &[Vec<i32>]) -> Option<i32> {
-//     // check for adjacent regions
-//     //    |
-//     // --  --
-//     //    |
-//     if i as i32 - 1 >= 0 && disk[i - 1][j] != -1 && disk[i - 1][j] != 0 {
-//         return Some(disk[i - 1][j]);
-//     }
-//     if i as i32 + 1 < disk.len() as i32 && disk[i + 1][j] != -1 && disk[i + 1][j] != 0 {
-//         return Some(disk[i + 1][j]);
-//     }
-//     if j as i32 - 1 >= 0 && disk[i][j - 1] != -1 && disk[i][j - 1] != 0 {
-//         return Some(disk[i][j - 1]);
-//     }
-//     if j as i32 + 1 < disk.len() as i32 && disk[i][j + 1] != -1 && disk[i][j + 1] != 0 {
-//         return Some(disk[i][j + 1]);
-//     }
-//     None
-// }
+fn get_surround_region(disk: &[Vec<i32>], i: usize, j: usize) -> Option<i32> {
+    if i as i32 - 1 >= 0 && disk[i - 1][j] != 0 && disk[i - 1][j] != -1 {
+        return Some(disk[i - 1][j]);
+    }
+    if j as i32 - 1 >= 0 && disk[i][j - 1] != 0 && disk[i][j - 1] != -1 {
+        return Some(disk[i][j - 1]);
+    }
+
+    None
+}
 fn get_disk(input: &str, disk_size: usize) -> Vec<String> {
     (0..disk_size)
         .into_iter()
