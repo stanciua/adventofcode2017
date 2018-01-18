@@ -33,7 +33,7 @@ fn get_hasher_from_input(input: &str) -> String {
         })
 }
 fn main() {
-    let input = "flqrgnkx";
+    let input = "hxtvlmkl";
     let disk = get_disk(input, 128);
     let count = get_count(&disk);
     println!("Squares used: {:?}", count);
@@ -61,57 +61,57 @@ fn get_no_regions(disk: &[String]) -> usize {
             .collect::<Vec<_>>()
             .iter()
             .flat_map(|s| s.chars())
-            .map(|c| {
-                let d = c.to_digit(10).unwrap();
-                if d == 1 {
-                    -1
-                } else {
-                    0
-                }
-            })
+            .map(|c| c.to_digit(10).unwrap())
             .collect::<Vec<_>>();
         disk_bin.push(row_bin);
     }
-    // insert regions inside disk data
-    let mut region = 1;
-    let mut found_square = true;
-    while found_square {
-        for i in 0..disk_bin.len() {
-            for j in 0..disk_bin[i].len() {
-                if disk_bin[i][j] == -1 {
-                    if let Some(reg) = get_surround_region(&disk_bin, i, j) {
-                        disk_bin[i][j] = reg;
-                    } else {
-                        disk_bin[i][j] = region;
-                        region += 1;
-                    }
-                }
-                if i == disk_bin.len() - 1 && j == disk_bin.len() - 1 {
-                    found_square = false;
-                }
+
+    let mut used_squares = Vec::new();
+    for i in 0..disk_bin.len() {
+        for j in 0..disk_bin[i].len() {
+            if disk_bin[i][j] == 1 {
+                used_squares.push((i, j));
             }
         }
     }
 
-    for i in 0..32 {
-        for j in 0..32 {
-            print!("{}:{},", j, disk_bin[i][j]);
+    let mut no_region = 0;
+    for i in 0..disk_bin.len() {
+        for j in 0..disk_bin[i].len() {
+            if disk_bin[i][j] == 1 {
+                no_region += 1;
+                reset_neighbors(i, j, disk_bin.as_mut_slice());
+            }
         }
-        println!();
-    }
-    region as usize
-}
-
-fn get_surround_region(disk: &[Vec<i32>], i: usize, j: usize) -> Option<i32> {
-    if i as i32 - 1 >= 0 && disk[i - 1][j] != 0 && disk[i - 1][j] != -1 {
-        return Some(disk[i - 1][j]);
-    }
-    if j as i32 - 1 >= 0 && disk[i][j - 1] != 0 && disk[i][j - 1] != -1 {
-        return Some(disk[i][j - 1]);
     }
 
-    None
+    no_region as usize
 }
+
+fn reset_neighbors(i: usize, j: usize, disk: &mut [Vec<u32>]) {
+    if disk[i][j] == 1 {
+        disk[i][j] = 0;
+    } else {
+        return;
+    }
+    // go right
+    if j + 1 < disk.len() {
+        reset_neighbors(i, j + 1, disk);
+    }
+    // go left
+    if j as i32 - 1 >= 0 {
+        reset_neighbors(i, j - 1, disk);
+    }
+    // go up
+    if i as i32 - 1 >= 0 {
+        reset_neighbors(i - 1, j, disk);
+    }
+    // go down
+    if i + 1 < disk.len() {
+        reset_neighbors(i + 1, j, disk);
+    }
+}
+
 fn get_disk(input: &str, disk_size: usize) -> Vec<String> {
     (0..disk_size)
         .into_iter()
