@@ -1,0 +1,9 @@
+[package]
+name = "day18"
+version = "0.1.0"
+authors = ["Andrei Stanciu <andreistanciu.as@gmail.com>"]
+
+[dependencies.nom]
+version = "*"
+features = ["nightly"]
+
