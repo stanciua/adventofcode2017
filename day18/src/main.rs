@@ -10,6 +10,7 @@ use std::thread;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::clone::Clone;
+use std::time::Duration;
 
 named!(name<&str>, map_res!(alpha, str::from_utf8));
 named!(value<&str>, map_res!(alphanumeric, str::from_utf8));
@@ -91,69 +92,84 @@ fn run_program(
     tx_count: Sender<i64>,
     instructions: &[Instruction],
 ) {
-    let mut registers = instructions.iter().map(|i| i.register).fold(
-        HashMap::new(),
-        |mut acc, v| {
-            acc.entry(v).or_insert(if program_id == 0 { 0 } else { 1 });
+    let mut registers = instructions
+        .iter()
+        .map(|i| i.register)
+        .filter(|c| !c.is_digit(10))
+        .fold(HashMap::new(), |mut acc, v| {
+            acc.entry(v).or_insert(0);
             acc
-        },
-    );
+        });
+    // Register p should start with the value of program id
+    *registers.entry('p').or_insert(0) = program_id;
 
     let mut instr_counter = 0i64;
     let mut snd_count = 0i64;
     loop {
+        // println!("pg {}, registers: {:?}", program_id, registers);
         let i = &instructions[instr_counter as usize];
+        // println!("pg {}: {:?}", program_id, i);
         match i.name.as_str() {
             "snd" => {
-                let tx_val =
-                    get_input_val_or_register_val(i.register.to_string().as_str(), &registers);
+                let tx_val = get_val(i.register.to_string().as_str(), &registers);
                 tx.send(tx_val).unwrap();
                 snd_count += 1;
-
-                println!(
-                    "program {} -> snd: {:?}, counter: {}",
-                    program_id, tx_val, instr_counter
-                );
+                // println!("snd count pg {}: {}", program_id, snd_count);
+                if program_id == 0 {
+                    println!(
+                        "program {} -> snd: {:?}, counter: {}",
+                        program_id, tx_val, instr_counter
+                    );
+                }
             }
             "set" => {
                 *registers.entry(i.register).or_insert(0) =
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers)
+                    get_val(&i.value.as_ref().unwrap(), &registers)
             }
             "add" => {
                 *registers.entry(i.register).or_insert(0) +=
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers)
+                    get_val(&i.value.as_ref().unwrap(), &registers)
             }
             "mul" => {
                 *registers.entry(i.register).or_insert(0) *=
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers)
+                    get_val(&i.value.as_ref().unwrap(), &registers)
             }
             "mod" => {
                 *registers.entry(i.register).or_insert(0) %=
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers)
+                    get_val(&i.value.as_ref().unwrap(), &registers)
             }
-            "rcv" => match rx.recv() {
+            "rcv" => match rx.recv_timeout(Duration::from_secs(2)) {
                 Ok(v) => {
-                    println!(
-                        "program {} -> rcv: {:?}, counter: {}",
-                        program_id, v, instr_counter
-                    );
-                    *registers.entry(i.register).or_insert(0) = v;
+                    // println!(
+                    //     "program {} -> rcv: {:?}, register: {}, counter: {}",
+                    //     program_id, v, i.register, instr_counter
+                    // );
+                    let inner_value = registers.entry(i.register).or_insert(0);
+
+                    *inner_value = v;
                 }
                 Err(_) => {
-                    println!("*************Err***********");
-                    tx_count.send(snd_count).unwrap();
+                    if program_id == 1 {
+                        tx_count.send(snd_count).unwrap();
+                    }
                     return;
                 }
             },
 
             "jgz" => {
-                if registers[&i.register] == 0 {
+                let reg_val = if let Some(r) = i.register.to_digit(10) {
+                    r as i64
+                } else {
+                    registers[&i.register]
+                };
+
+                if reg_val == 0 {
                     instr_counter += 1;
                     continue;
                 }
 
-                instr_counter +=
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers);
+                let val = get_val(&i.value.as_ref().unwrap(), &registers);
+                instr_counter += val;
                 continue;
             }
             _ => unreachable!(),
@@ -162,7 +178,7 @@ fn run_program(
     }
 }
 
-fn get_input_val_or_register_val(value: &str, registers: &HashMap<char, i64>) -> i64 {
+fn get_val(value: &str, registers: &HashMap<char, i64>) -> i64 {
     let first_char = value.chars().take(1).next().unwrap();
     if first_char.is_alphabetic() {
         return registers[&first_char];
@@ -189,19 +205,19 @@ fn get_val_of_recovered_freq(instructions: &[Instruction]) -> i64 {
             }
             "set" => {
                 *registers.entry(i.register).or_insert(0) =
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers)
+                    get_val(&i.value.as_ref().unwrap(), &registers)
             }
             "add" => {
                 *registers.entry(i.register).or_insert(0) +=
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers)
+                    get_val(&i.value.as_ref().unwrap(), &registers)
             }
             "mul" => {
                 *registers.entry(i.register).or_insert(0) *=
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers)
+                    get_val(&i.value.as_ref().unwrap(), &registers)
             }
             "mod" => {
                 *registers.entry(i.register).or_insert(0) %=
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers)
+                    get_val(&i.value.as_ref().unwrap(), &registers)
             }
             "rcv" => {
                 if registers[&i.register] == 0 {
@@ -216,8 +232,7 @@ fn get_val_of_recovered_freq(instructions: &[Instruction]) -> i64 {
                     continue;
                 }
 
-                instr_counter +=
-                    get_input_val_or_register_val(&i.value.as_ref().unwrap(), &registers);
+                instr_counter += get_val(&i.value.as_ref().unwrap(), &registers);
                 continue;
             }
             _ => unreachable!(),
