@@ -52,10 +52,10 @@ fn main() {
     for line in input_txt.lines() {
         instructions.push(instruction(line.as_bytes()).unwrap().1);
     }
-    // println!(
-    //     "Last play sound frequency is: {:?}",
-    //     get_val_of_recovered_freq(instructions.as_slice())
-    // );
+    println!(
+        "Last play sound frequency is: {:?}",
+        get_val_of_recovered_freq(instructions.as_slice())
+    );
     // p0 -> p1 channel
     let (tx01, rx01) = mpsc::channel();
     // p1 -> p0 channel
@@ -77,12 +77,11 @@ fn main() {
         run_program(1, tx10, rx01, tx_count, instructions_p1.as_slice());
     });
 
-    let mut rcv_count = 0;
-    for count in rx_count {
-        rcv_count = count;
+   // we wait for pid 1 to send us the count times he sent a value
+   match rx_count.recv_timeout(Duration::from_secs(2)) {
+	        Ok(v) => println!("Program 1 has sent: {} times", v),
+        Err(_) => return,
     }
-
-    println!("Program 1 has sent: {} times", rcv_count);
 }
 
 fn run_program(
@@ -97,53 +96,45 @@ fn run_program(
         .map(|i| i.register)
         .filter(|c| !c.is_digit(10))
         .fold(HashMap::new(), |mut acc, v| {
-            acc.entry(v).or_insert(0);
+            if v == 'p' {
+                acc.entry(v).or_insert(program_id);
+            } else {
+                acc.entry(v).or_insert(0);
+            }
             acc
         });
-    // Register p should start with the value of program id
-    *registers.entry('p').or_insert(0) = program_id;
-
     let mut instr_counter = 0i64;
     let mut snd_count = 0i64;
     loop {
-        // println!("pg {}, registers: {:?}", program_id, registers);
-        let i = &instructions[instr_counter as usize];
-        // println!("pg {}: {:?}", program_id, i);
+        let ref i = instructions[instr_counter as usize];
         match i.name.as_str() {
             "snd" => {
                 let tx_val = get_val(i.register.to_string().as_str(), &registers);
                 tx.send(tx_val).unwrap();
                 snd_count += 1;
-                // println!("snd count pg {}: {}", program_id, snd_count);
-                if program_id == 0 {
-                    println!(
-                        "program {} -> snd: {:?}, counter: {}",
-                        program_id, tx_val, instr_counter
-                    );
-                }
             }
             "set" => {
-                *registers.entry(i.register).or_insert(0) =
-                    get_val(&i.value.as_ref().unwrap(), &registers)
+                let v = get_val(&i.value.as_ref().unwrap(), &registers);
+                let mut r = registers.entry(i.register).or_insert(0);
+                *r = v;
             }
             "add" => {
-                *registers.entry(i.register).or_insert(0) +=
-                    get_val(&i.value.as_ref().unwrap(), &registers)
+                let v = get_val(&i.value.as_ref().unwrap(), &registers);
+                let mut r = registers.entry(i.register).or_insert(0);
+                *r += v;
             }
             "mul" => {
-                *registers.entry(i.register).or_insert(0) *=
-                    get_val(&i.value.as_ref().unwrap(), &registers)
+                let v = get_val(&i.value.as_ref().unwrap(), &registers);
+                let mut r = registers.entry(i.register).or_insert(0);
+                *r *= v;
             }
             "mod" => {
-                *registers.entry(i.register).or_insert(0) %=
-                    get_val(&i.value.as_ref().unwrap(), &registers)
+                let v = get_val(&i.value.as_ref().unwrap(), &registers);
+                let mut r = registers.entry(i.register).or_insert(0);
+                *r %= v;
             }
-            "rcv" => match rx.recv_timeout(Duration::from_secs(2)) {
+            "rcv" => match rx.recv_timeout(Duration::from_secs(1)) {
                 Ok(v) => {
-                    // println!(
-                    //     "program {} -> rcv: {:?}, register: {}, counter: {}",
-                    //     program_id, v, i.register, instr_counter
-                    // );
                     let inner_value = registers.entry(i.register).or_insert(0);
 
                     *inner_value = v;
@@ -163,7 +154,7 @@ fn run_program(
                     registers[&i.register]
                 };
 
-                if reg_val == 0 {
+                if reg_val <= 0 {
                     instr_counter += 1;
                     continue;
                 }
@@ -175,6 +166,9 @@ fn run_program(
             _ => unreachable!(),
         }
         instr_counter += 1;
+        if instr_counter == instructions.len() as i64 {
+            break;
+        }
     }
 }
 
@@ -227,7 +221,7 @@ fn get_val_of_recovered_freq(instructions: &[Instruction]) -> i64 {
                 break;
             }
             "jgz" => {
-                if registers[&i.register] == 0 {
+                if registers[&i.register] <= 0 {
                     instr_counter += 1;
                     continue;
                 }
