@@ -25,7 +25,6 @@ named!(
             value: v.map(|val| {
                 let mut new_val = s.map_or("", |sign| "-").to_string();
                 new_val.extend(val.chars());
-
                 new_val
             }),
         })
@@ -77,9 +76,9 @@ fn main() {
         run_program(1, tx10, rx01, tx_count, instructions_p1.as_slice());
     });
 
-   // we wait for pid 1 to send us the count times he sent a value
-   match rx_count.recv_timeout(Duration::from_secs(2)) {
-	        Ok(v) => println!("Program 1 has sent: {} times", v),
+    // we wait for pid 1 to send us the count times he sent a value
+    match rx_count.recv() {
+        Ok(v) => println!("Program 1 has sent: {} times", v),
         Err(_) => return,
     }
 }
@@ -91,7 +90,7 @@ fn run_program(
     tx_count: Sender<i64>,
     instructions: &[Instruction],
 ) {
-    let mut registers = instructions
+    let mut regs = instructions
         .iter()
         .map(|i| i.register)
         .filter(|c| !c.is_digit(10))
@@ -103,45 +102,35 @@ fn run_program(
             }
             acc
         });
-    let mut instr_counter = 0i64;
-    let mut snd_count = 0i64;
+    let mut pc = 0i64;
+    let mut count = 0i64;
     loop {
-        let ref i = instructions[instr_counter as usize];
+        let ref i = instructions[pc as usize];
         match i.name.as_str() {
             "snd" => {
-                let tx_val = get_val(i.register.to_string().as_str(), &registers);
-                tx.send(tx_val).unwrap();
-                snd_count += 1;
+                tx.send(get_val(i.register.to_string().as_str(), &regs))
+                    .unwrap();
+                count += 1;
             }
             "set" => {
-                let v = get_val(&i.value.as_ref().unwrap(), &registers);
-                let mut r = registers.entry(i.register).or_insert(0);
-                *r = v;
+                *regs.get_mut(&i.register).unwrap() = get_val(&i.value.as_ref().unwrap(), &regs)
             }
             "add" => {
-                let v = get_val(&i.value.as_ref().unwrap(), &registers);
-                let mut r = registers.entry(i.register).or_insert(0);
-                *r += v;
+                *regs.get_mut(&i.register).unwrap() += get_val(&i.value.as_ref().unwrap(), &regs)
             }
             "mul" => {
-                let v = get_val(&i.value.as_ref().unwrap(), &registers);
-                let mut r = registers.entry(i.register).or_insert(0);
-                *r *= v;
+                *regs.get_mut(&i.register).unwrap() *= get_val(&i.value.as_ref().unwrap(), &regs)
             }
             "mod" => {
-                let v = get_val(&i.value.as_ref().unwrap(), &registers);
-                let mut r = registers.entry(i.register).or_insert(0);
-                *r %= v;
+                *regs.get_mut(&i.register).unwrap() %= get_val(&i.value.as_ref().unwrap(), &regs)
             }
             "rcv" => match rx.recv_timeout(Duration::from_secs(1)) {
                 Ok(v) => {
-                    let inner_value = registers.entry(i.register).or_insert(0);
-
-                    *inner_value = v;
+                    *regs.entry(i.register).or_insert(0) = v;
                 }
                 Err(_) => {
                     if program_id == 1 {
-                        tx_count.send(snd_count).unwrap();
+                        tx_count.send(count).unwrap();
                     }
                     return;
                 }
@@ -151,87 +140,69 @@ fn run_program(
                 let reg_val = if let Some(r) = i.register.to_digit(10) {
                     r as i64
                 } else {
-                    registers[&i.register]
+                    regs[&i.register]
                 };
 
-                if reg_val <= 0 {
-                    instr_counter += 1;
-                    continue;
+                if reg_val > 0 {
+                    pc += get_val(&i.value.as_ref().unwrap(), &regs) - 1;
                 }
-
-                let val = get_val(&i.value.as_ref().unwrap(), &registers);
-                instr_counter += val;
-                continue;
             }
             _ => unreachable!(),
         }
-        instr_counter += 1;
-        if instr_counter == instructions.len() as i64 {
-            break;
-        }
+        pc += 1;
     }
 }
 
-fn get_val(value: &str, registers: &HashMap<char, i64>) -> i64 {
+fn get_val(value: &str, regs: &HashMap<char, i64>) -> i64 {
     let first_char = value.chars().take(1).next().unwrap();
     if first_char.is_alphabetic() {
-        return registers[&first_char];
+        return regs[&first_char];
     } else {
         value.parse::<i64>().unwrap()
     }
 }
 fn get_val_of_recovered_freq(instructions: &[Instruction]) -> i64 {
-    let mut registers = instructions.iter().map(|i| i.register).fold(
-        HashMap::new(),
-        |mut acc, v| {
+    let mut regs = instructions
+        .iter()
+        .map(|i| i.register)
+        .fold(HashMap::new(), |mut acc, v| {
             acc.entry(v).or_insert(0);
             acc
-        },
-    );
+        });
 
     let mut last_played_sound = 0;
-    let mut instr_counter = 0i64;
+    let mut pc = 0i64;
     loop {
-        let i = &instructions[instr_counter as usize];
+        let i = &instructions[pc as usize];
         match i.name.as_str() {
             "snd" => {
-                last_played_sound = registers[&i.register];
+                last_played_sound = regs[&i.register];
             }
             "set" => {
-                *registers.entry(i.register).or_insert(0) =
-                    get_val(&i.value.as_ref().unwrap(), &registers)
+                *regs.get_mut(&i.register).unwrap() = get_val(&i.value.as_ref().unwrap(), &regs)
             }
             "add" => {
-                *registers.entry(i.register).or_insert(0) +=
-                    get_val(&i.value.as_ref().unwrap(), &registers)
+                *regs.get_mut(&i.register).unwrap() += get_val(&i.value.as_ref().unwrap(), &regs)
             }
             "mul" => {
-                *registers.entry(i.register).or_insert(0) *=
-                    get_val(&i.value.as_ref().unwrap(), &registers)
+                *regs.get_mut(&i.register).unwrap() *= get_val(&i.value.as_ref().unwrap(), &regs)
             }
             "mod" => {
-                *registers.entry(i.register).or_insert(0) %=
-                    get_val(&i.value.as_ref().unwrap(), &registers)
+                *regs.get_mut(&i.register).unwrap() %= get_val(&i.value.as_ref().unwrap(), &regs)
             }
             "rcv" => {
-                if registers[&i.register] == 0 {
-                    instr_counter += 1;
-                    continue;
+                if regs[&i.register] != 0 {
+                    break;
                 }
-                break;
             }
             "jgz" => {
-                if registers[&i.register] <= 0 {
-                    instr_counter += 1;
-                    continue;
+                if regs[&i.register] > 0 {
+                    pc += get_val(&i.value.as_ref().unwrap(), &regs) - 1;
                 }
-
-                instr_counter += get_val(&i.value.as_ref().unwrap(), &registers);
-                continue;
             }
             _ => unreachable!(),
         }
-        instr_counter += 1;
+        pc += 1;
     }
     last_played_sound
 }
