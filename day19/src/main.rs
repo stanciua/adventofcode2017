@@ -16,10 +16,8 @@ fn main() {
     // start position is always the first line a the top with a single | on it
     let start_pos = (0, map[0].iter().position(|&c| c == '|').unwrap());
 
-    println!(
-        "Path to exit is: {:?}",
-        find_exit(map.as_slice(), start_pos)
-    );
+    let (path, no_steps) = find_exit(map.as_slice(), start_pos);
+    println!("Path to exit is: {:?}, done in {} steps", path, no_steps);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -30,11 +28,11 @@ enum Direction {
     Right,
 }
 
-fn find_exit(map: &[Vec<char>], start_position: (usize, usize)) -> String {
+fn find_exit(map: &[Vec<char>], start_position: (usize, usize)) -> (String, usize) {
     let mut curr_dir = Direction::Down;
     let mut curr_pos = start_position;
     let mut output = String::new();
-
+    let mut no_steps = 1;
     loop {
         let char_at_pos = map[curr_pos.0][curr_pos.1];
         if char_at_pos.is_alphanumeric() {
@@ -43,12 +41,13 @@ fn find_exit(map: &[Vec<char>], start_position: (usize, usize)) -> String {
         if let Some((next_dir, next_pos)) = get_next_direction(map, curr_dir, curr_pos) {
             curr_dir = next_dir;
             curr_pos = next_pos;
+            no_steps += 1;
         } else {
             break;
         }
     }
 
-    output
+    (output, no_steps)
 }
 
 fn get_next_direction(
