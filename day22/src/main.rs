@@ -39,7 +39,7 @@ fn main() {
     println!(
         "The number of infections after {} bursts is: {}",
         10_000,
-        advance(
+        run_virus(
             Algorithm::V1,
             initial_grid.as_slice(),
             initial_grid[0].len(),
@@ -50,7 +50,7 @@ fn main() {
     println!(
         "The number of infections after {} bursts is: {}",
         10_000_000,
-        advance(
+        run_virus(
             Algorithm::V2,
             initial_grid.as_slice(),
             initial_grid[0].len(),
@@ -84,7 +84,7 @@ fn translate_point(point: (usize, usize), from: usize, to: usize) -> (usize, usi
     (up_left.0 + point.0, up_left.1 + point.1)
 }
 
-fn advance(algorithm: Algorithm, from_grid: &[Vec<char>], size: usize, bursts: usize) -> usize {
+fn run_virus(algorithm: Algorithm, from_grid: &[Vec<char>], size: usize, bursts: usize) -> usize {
     let mut curr_dir = Direction::Up;
     let mut grid = extend_grid(from_grid, size);
     let mut curr_pos = (size / 2, size / 2);
