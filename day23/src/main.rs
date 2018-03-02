@@ -47,29 +47,39 @@ fn main() {
     for line in input_txt.lines() {
         instructions.push(instruction(line.as_bytes()).unwrap().1);
     }
+    // println!(
+    //     "Mulitply was invoked {:?} times.",
+    //     run_program(false, &instructions)
+    // );
     println!(
-        "Mulitply was invoked {:?} times.",
-        run_program(&instructions)
+        "Last value of 'h' register is: {}",
+        run_program(true, &instructions)
     );
 }
 
-fn run_program(instructions: &[Instruction]) -> i64 {
+fn run_program(debug_mode: bool, instructions: &[Instruction]) -> i64 {
     let mut regs = instructions
         .iter()
         .map(|i| i.register)
         .filter(|c| !c.is_digit(10))
         .fold(HashMap::new(), |mut acc, v| {
-            acc.entry(v).or_insert(0);
+            if v == 'a' && debug_mode {
+                acc.entry(v).or_insert(1);
+            } else {
+                acc.entry(v).or_insert(0);
+            }
             acc
         });
+
     let mut pc = 0i64;
     let mut count = 0i64;
     let no_instructions = instructions.len();
-    loop {
+    for _ in 0..1_000_000 {
         if pc >= no_instructions as i64 {
             break;
         }
         let ref i = instructions[pc as usize];
+        println!("{} {} {}", i.name, i.register, i.value.as_ref().unwrap());
         match i.name.as_str() {
             "set" => {
                 *regs.get_mut(&i.register).unwrap() = get_val(&i.value.as_ref().unwrap(), &regs)
@@ -96,6 +106,7 @@ fn run_program(instructions: &[Instruction]) -> i64 {
             _ => unreachable!(),
         }
         pc += 1;
+        println!("r: {:?}", regs);
     }
     count
 }
