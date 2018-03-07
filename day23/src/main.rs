@@ -1,3 +1,5 @@
+#![feature(iterator_step_by)]
+
 #[macro_use]
 extern crate nom;
 
@@ -47,10 +49,23 @@ fn main() {
     for line in input_txt.lines() {
         instructions.push(instruction(line.as_bytes()).unwrap().1);
     }
-    // println!(
-    //     "Mulitply was invoked {:?} times.",
-    //     run_program(false, &instructions)
-    // );
+    println!(
+        "Mulitply was invoked {:?} times.",
+        run_program(false, &instructions)
+    );
+
+    // read the second part 2 optimized solution and print the result of h
+    let path = "optimized_input.txt";
+    let mut optimized_input = File::open(path).expect("Unable to open file!");
+    let mut optimized_input_txt = String::new();
+    match optimized_input.read_to_string(&mut optimized_input_txt) {
+        Err(_) => return,
+        Ok(n) => println!("Read {} bytes", n),
+    }
+    let mut instructions = Vec::new();
+    for line in optimized_input_txt.lines() {
+        instructions.push(instruction(line.as_bytes()).unwrap().1);
+    }
     println!(
         "Last value of 'h' register is: {}",
         run_program(true, &instructions)
@@ -74,12 +89,11 @@ fn run_program(debug_mode: bool, instructions: &[Instruction]) -> i64 {
     let mut pc = 0i64;
     let mut count = 0i64;
     let no_instructions = instructions.len();
-    for _ in 0..1_000_000 {
+    loop {
         if pc >= no_instructions as i64 {
             break;
         }
         let ref i = instructions[pc as usize];
-        println!("{} {} {}", i.name, i.register, i.value.as_ref().unwrap());
         match i.name.as_str() {
             "set" => {
                 *regs.get_mut(&i.register).unwrap() = get_val(&i.value.as_ref().unwrap(), &regs)
@@ -91,7 +105,13 @@ fn run_program(debug_mode: bool, instructions: &[Instruction]) -> i64 {
                 *regs.get_mut(&i.register).unwrap() *= get_val(&i.value.as_ref().unwrap(), &regs);
                 count += 1;
             }
-
+            // optimize the two inner loops away by using a dedicated prime function 
+            "prm" => {
+                let is_prime = is_prime(get_val(&i.value.as_ref().unwrap(), &regs));
+                if !is_prime {
+                    *regs.get_mut(&i.register).unwrap() = 0;
+                }
+            }
             "jnz" => {
                 let reg_val = if let Some(r) = i.register.to_digit(10) {
                     r as i64
@@ -103,12 +123,17 @@ fn run_program(debug_mode: bool, instructions: &[Instruction]) -> i64 {
                     pc += get_val(&i.value.as_ref().unwrap(), &regs) - 1;
                 }
             }
+
             _ => unreachable!(),
         }
         pc += 1;
-        println!("r: {:?}", regs);
     }
-    count
+    
+    if debug_mode {
+        regs[&'h']
+    } else {
+        count
+    }
 }
 
 fn get_val(value: &str, regs: &HashMap<char, i64>) -> i64 {
@@ -118,4 +143,12 @@ fn get_val(value: &str, regs: &HashMap<char, i64>) -> i64 {
     } else {
         value.parse::<i64>().unwrap()
     }
+}
+
+fn is_prime(n: i64) -> bool {
+    n == 1 || n == 2
+        || (2..((n as f64).sqrt() + 1 as f64) as i64)
+            .into_iter()
+            .map(|v| n % v == 0)
+            .all(|v| v == false)
 }
