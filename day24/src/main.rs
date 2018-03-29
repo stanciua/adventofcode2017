@@ -42,8 +42,39 @@ fn main() {
     for port in starting_ports_set {
         remaining_ports.insert(0, port);
         // println!("{:?}", remaining_ports);
-        let graph = build_port_graph(&remaining_ports);
-        println!("--------------------------------------------------");
+        let mut graph = build_port_graph(&remaining_ports);
+        let root = graph
+            .node_indices()
+            .find(|r| *graph.node_weight(*r).unwrap() == port)
+            .unwrap();
+
+        let conn_comps = petgraph::algo::kosaraju_scc(&graph);
+        let mut to_be_removed_nodes = Vec::new();
+        for v in conn_comps {
+            if let Some(_) = v.iter().find(|n| **n == root) {
+                continue;
+            }
+            to_be_removed_nodes.extend(v);
+        }
+        let to_be_removed_nodes = to_be_removed_nodes
+            .into_iter()
+            .map(|n| *graph.node_weight(n).unwrap())
+            .collect::<Vec<_>>();
+
+        for n in to_be_removed_nodes {
+            let node_idx = graph
+                .node_indices()
+                .find(|node| *graph.node_weight(*node).unwrap() == n)
+                .unwrap();
+
+            graph.remove_node(node_idx);
+        }
+
+        // graph
+        //     .node_indices()
+        //     .inspect(|n| println!("{:?}", graph.node_weight(*n).unwrap()))
+        //     .collect::<Vec<_>>();
+
         strengths.push(calculate_strength(port, &graph));
         remaining_ports.remove(0);
     }
@@ -64,7 +95,7 @@ fn get_adjacent_list(port: (i32, i32), ports: &[(i32, i32)]) -> Vec<(i32, i32)> 
     })
 }
 
-fn build_port_graph(ports: &[(i32, i32)]) -> Graph<(i32, i32), (i32, i32)> {
+fn build_port_graph(ports: &[(i32, i32)]) -> Graph<(i32, i32), (i32, i32), petgraph::Undirected> {
     let mut union = ports
         .iter()
         .cloned()
@@ -85,7 +116,10 @@ fn build_port_graph(ports: &[(i32, i32)]) -> Graph<(i32, i32), (i32, i32)> {
     });
 
     let (node_idxs, mut graph) = ports.iter().fold(
-        (HashMap::new(), Graph::<(i32, i32), (i32, i32)>::new()),
+        (
+            HashMap::new(),
+            Graph::<(i32, i32), (i32, i32), petgraph::Undirected>::new_undirected(),
+        ),
         |mut acc, v| {
             let idx = acc.1.add_node(*v);
             acc.0.entry(v).or_insert(idx);
@@ -103,33 +137,45 @@ fn build_port_graph(ports: &[(i32, i32)]) -> Graph<(i32, i32), (i32, i32)> {
     graph
 }
 
-fn calculate_strength(port: (i32, i32), graph: &Graph<(i32, i32), (i32, i32)>) -> i32 {
-    //     println!("{:?}", Dot::with_config(&graph, &[Config::EdgeNoLabel]));
+fn calculate_strength(
+    port: (i32, i32),
+    graph: &Graph<(i32, i32), (i32, i32), petgraph::Undirected>,
+) -> i32 {
+    // println!("{:?}", Dot::with_config(&graph, &[Config::EdgeNoLabel]));
     // println!("{:?}", graph);
     // println!("{:?}", is_cyclic_directed(&graph));
+    // if let Ok(v) = toposort(graph, None) {
+    //     v.into_iter()
+    //         .inspect(|v| println!("{:?}", graph.node_weight(*v)))
+    //         .collect::<Vec<_>>();
+    // get the position of node 0 in topological order
+    // if let Some(pos) = v.iter()
+    //     .position(|n| if n.index() == 0 { true } else { false })
+    // {
+    //     return v.into_iter()
+    //         .skip(pos)
+    //         .inspect(|&n| println!("{:?} -> {:?}", n, graph.node_weight(n)))
+    //         .fold(0, |mut acc, n| {
+    //             let weight = graph.node_weight(n).unwrap();
+    //             acc += weight.0 + weight.1;
+    //             acc
+    //         });
+    // }
+
+    let root = graph
+        .node_indices()
+        .find(|r| *graph.node_weight(*r).unwrap() == port)
+        .unwrap();
     println!(
-        "neighbors: {:?}",
-        graph
-            .node_indices()
-            .inspect(|n| println!("{:?} -> ", graph.node_weight(*n).unwrap()))
-            .map(|n| graph.neighbors(n).collect::<Vec<_>>())
-            .collect::<Vec<_>>()
+        "{}",
+        "-----------------------------------------------------"
     );
-    if let Ok(v) = toposort(&graph, None) {
-        // get the position of node 0 in topological order
-        if let Some(pos) = v.iter()
-            .position(|n| if n.index() == 0 { true } else { false })
-        {
-            return v.into_iter()
-                .skip(pos)
-                // .inspect(|&n| println!("{:?} -> {:?}", n, graph.node_weight(n)))
-                .fold(0, |mut acc, n| {
-                    let weight = graph.node_weight(n).unwrap();
-                    acc += weight.0 + weight.1;
-                    acc
-                });
-        }
+    let mut dfs = Dfs::new(&graph, root);
+    let mut sum = 0;
+    while let Some(nx) = dfs.next(&graph) {
+        let weight = graph.node_weight(nx).unwrap();
+        sum += weight.0 + weight.1;
     }
 
-    0
+    sum
 }
