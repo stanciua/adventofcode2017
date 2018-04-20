@@ -19,7 +19,7 @@ fn main() {
     for line in input_txt.lines() {
         rules.push(rule(line.as_bytes()).unwrap().1);
     }
-    println!("{:#?}", rules);
+    println!("{:?}", rules);
 }
 named!(
     chars<Vec<char>>,
@@ -194,7 +194,7 @@ fn rotate_clockwise_90_deg(input: &[Vec<char>]) -> Vec<Vec<char>> {
     output
 }
 
-fn flip_ud(matrix: &mut [Vec<i32>]) {
+fn flip_ud(matrix: &mut [Vec<char>]) {
     let lgth = matrix.len();
     for idx in 0..lgth / 2 {
         assert!(matrix[idx].len() == matrix[lgth - idx - 1].len());
@@ -207,7 +207,7 @@ fn flip_ud(matrix: &mut [Vec<i32>]) {
     }
 }
 
-fn flip_lr(matrix: &mut [Vec<i32>]) {
+fn flip_lr(matrix: &mut [Vec<char>]) {
     let lgth = matrix.len();
     for idx in 0..lgth / 2 {
         let row_lgth = matrix.len();
@@ -217,4 +217,41 @@ fn flip_lr(matrix: &mut [Vec<i32>]) {
             matrix[i][lgth - idx - 1] = tmp;
         }
     }
+}
+
+fn match_rule_to_square(rule: &Vec<Vec<char>>, square: &Vec<Vec<char>>) -> bool {
+    if rule == square {
+        return true;
+    }
+    // flip up - down
+    let mut square_ud = square.clone();
+    flip_ud(square_ud.as_mut_slice());
+    if *rule == square_ud {
+        return true;
+    }
+
+    // flip left - right
+    let mut square_lr = square.clone();
+    flip_lr(square_lr.as_mut_slice());
+    if *rule == square_lr {
+        return true;
+    }
+
+    // rotate 90 clockwise
+    let mut square_rotate = rotate_clockwise_90_deg(square.as_slice());
+    if *rule == square_rotate {
+        return true;
+    }
+    // rotate 180 clockwise
+    square_rotate = rotate_clockwise_90_deg(square_rotate.as_slice());
+    if *rule == square_rotate {
+        return true;
+    }
+    // rotate 270 clockwise
+    square_rotate = rotate_clockwise_90_deg(square_rotate.as_slice());
+    if *rule == square_rotate {
+        return true;
+    }
+
+    false
 }
