@@ -19,4 +19,4 @@ In state B:
   If the current value is 1:
     - Write the value 1.
     - Move one slot to the right.
-    - Continue with  state A.
+    - Continue with state A.

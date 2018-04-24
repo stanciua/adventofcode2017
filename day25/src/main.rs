@@ -8,6 +8,14 @@ use std::fs::File;
 use std::io::Read;
 use std::str;
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+struct State {
+    curr_val: u32,
+    next_val: u32,
+    slot: i32,
+    next_state: char,
+}
+
 fn main() {
     let path = "input.txt";
     let mut input = File::open(path).expect("Unable to open file!");
@@ -17,11 +25,11 @@ fn main() {
         Ok(n) => println!("Read {} bytes", n),
     }
 
-    // let mut rules = Vec::new();
-    for line in input_txt.lines() {
-        // rules.push(rule(line.as_bytes()).unwrap().1);
-    }
-    // println!("{:#?}", rules);
+    let (begin_state, steps_to_diag, instructions) =
+        parse_instructions(input_txt.as_bytes()).unwrap().1;
+    println!("begin state: {:?}", begin_state);
+    println!("steps to diagnostic: {:?}", steps_to_diag);
+    println!("instructions: {:?}", instructions);
 }
 named!(
     begin_state<char>,
@@ -33,6 +41,11 @@ named!(
         tag!("Perform a diagnostic checksum after") >> space >> s: anychar >> space >> tag!("steps")
             >> anychar >> eol >> eol >> (s.to_digit(10).unwrap())
     )
+);
+
+named!(
+    in_state<char>,
+    do_parse!(tag!("In state") >> space >> s: anychar >> anychar >> eol >> (s))
 );
 
 named!(
@@ -62,26 +75,42 @@ named!(
 
 named!(
     next_state<char>,
-    do_parse!(tag!("    - Continue with state") >> space >> s: anychar >> char!('.') >> eol >> (s))
+    do_parse!(
+        tag!("    - Continue with state") >> space >> s: anychar >> char!('.')
+            >> opt!(complete!(eol)) >> (s)
+    )
 );
 
-// named!(
-//     chars<Vec<char>>,
-//     map!(
-//         map_res!(take_till!(|ch| ch != b'.' && ch != b'#'), str::from_utf8),
-//         |s| s.chars().collect::<Vec<_>>()
-//     )
-// );
+named!(
+    one_state<State>,
+    do_parse!(
+        c: curr_value >> w: write_val >> m: move_cursor >> n: next_state >> (State {
+            curr_val: c,
+            next_val: w,
+            slot: m,
+            next_state: n
+        })
+    )
+);
 
-// named!(
-//     pixels<Vec<Vec<char>>>,
-//     separated_list_complete!(char!('/'), chars)
-// );
+named!(
+    two_state<(State, State)>,
+    do_parse!(s1: one_state >> s2: one_state >> (s1, s2))
+);
+named!(
+    with_state<(char, (State, State))>,
+    do_parse!(s: in_state >> ts: two_state >> (s, ts))
+);
 
-// named!(
-//     rule<Rule>,
-//     do_parse!(p: pixels >> space >> tag!("=>") >> space >> r: pixels >> (Rule::from_pixels(p, r)))
-// );
+named!(
+    machine_instructions<Vec<(char, (State, State))>>,
+    separated_list_complete!(eol, with_state)
+);
+
+named!(
+    parse_instructions<(char, u32, Vec<(char, (State, State))>)>,
+    do_parse!(b: begin_state >> s: steps_to_diagnostic >> mi: machine_instructions >> (b, s, mi))
+);
 
 #[cfg(test)]
 mod test {
@@ -131,6 +160,181 @@ mod test {
             next_state(b"    - Continue with state B.\n"),
             IResult::Done(&b""[..], 'B')
         );
+    }
+    #[test]
+    fn test_next_state_no_newline_at_the_end() {
+        assert_eq!(
+            next_state(b"    - Continue with state B."),
+            IResult::Done(&b""[..], 'B')
+        );
+    }
+
+    #[test]
+    fn test_single_state() {
+        assert_eq!(
+            one_state(
+                r###"  If the current value is 0:
+    - Write the value 1.
+    - Move one slot to the right.
+    - Continue with state B.
+"###
+                    .as_bytes(),
+            ),
+            IResult::Done(
+                &b""[..],
+                State {
+                    curr_val: 0,
+                    next_val: 1,
+                    slot: 1,
+                    next_state: 'B'
+                }
+            )
+        )
+    }
+    #[test]
+    fn test_two_states() {
+        assert_eq!(
+            two_state(
+                r###"  If the current value is 0:
+    - Write the value 1.
+    - Move one slot to the right.
+    - Continue with state B.
+  If the current value is 1:
+    - Write the value 0.
+    - Move one slot to the left.
+    - Continue with state B.
+"###
+                    .as_bytes(),
+            ),
+            IResult::Done(
+                &b""[..],
+                (
+                    State {
+                        curr_val: 0,
+                        next_val: 1,
+                        slot: 1,
+                        next_state: 'B'
+                    },
+                    State {
+                        curr_val: 1,
+                        next_val: 0,
+                        slot: -1,
+                        next_state: 'B'
+                    }
+                )
+            )
+        )
+    }
+    #[test]
+    fn test_in_state() {
+        assert_eq!(
+            with_state(
+                r###"In state A:
+  If the current value is 0:
+    - Write the value 1.
+    - Move one slot to the right.
+    - Continue with state B.
+  If the current value is 1:
+    - Write the value 0.
+    - Move one slot to the left.
+    - Continue with state B.
+"###
+                    .as_bytes(),
+            ),
+            IResult::Done(
+                &b""[..],
+                (
+                    'A',
+                    (
+                        State {
+                            curr_val: 0,
+                            next_val: 1,
+                            slot: 1,
+                            next_state: 'B'
+                        },
+                        State {
+                            curr_val: 1,
+                            next_val: 0,
+                            slot: -1,
+                            next_state: 'B'
+                        }
+                    )
+                )
+            )
+        )
+    }
+    #[test]
+    fn test_parse_instructions() {
+        assert_eq!(
+            parse_instructions(
+                r###"Begin in state A.
+Perform a diagnostic checksum after 6 steps.
+
+In state A:
+  If the current value is 0:
+    - Write the value 1.
+    - Move one slot to the right.
+    - Continue with state B.
+  If the current value is 1:
+    - Write the value 0.
+    - Move one slot to the left.
+    - Continue with state B.
+
+In state B:
+  If the current value is 0:
+    - Write the value 1.
+    - Move one slot to the left.
+    - Continue with state A.
+  If the current value is 1:
+    - Write the value 1.
+    - Move one slot to the right.
+    - Continue with state A."###
+                    .as_bytes(),
+            ),
+            IResult::Done(
+                &b""[..],
+                (
+                    'A',
+                    6,
+                    vec![
+                        (
+                            'A',
+                            (
+                                State {
+                                    curr_val: 0,
+                                    next_val: 1,
+                                    slot: 1,
+                                    next_state: 'B',
+                                },
+                                State {
+                                    curr_val: 1,
+                                    next_val: 0,
+                                    slot: -1,
+                                    next_state: 'B',
+                                },
+                            ),
+                        ),
+                        (
+                            'B',
+                            (
+                                State {
+                                    curr_val: 0,
+                                    next_val: 1,
+                                    slot: -1,
+                                    next_state: 'A',
+                                },
+                                State {
+                                    curr_val: 1,
+                                    next_val: 1,
+                                    slot: 1,
+                                    next_state: 'A',
+                                },
+                            ),
+                        ),
+                    ]
+                )
+            )
+        )
     }
 
 }
