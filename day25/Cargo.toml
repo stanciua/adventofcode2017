@@ -3,6 +3,10 @@ name = "day25"
 version = "0.1.0"
 authors = ["stanciua <andrei.stanciu@aciworldwide.com>"]
 
+
+[dependencies.nom]
+features = ["nightly"]
+
 [dependencies]
-nom = "*"
 pretty_assertions = "0.5.1"
+lazy_static = "*"

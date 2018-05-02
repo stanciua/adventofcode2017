@@ -2,18 +2,95 @@
 extern crate pretty_assertions;
 #[macro_use]
 extern crate nom;
+#[macro_use]
+extern crate lazy_static;
 
 use nom::*;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::str;
 
+lazy_static! {
+    static ref STATES: HashMap<char, usize> = {
+        let mut m = HashMap::new();
+        m.insert('A', 0);
+        m.insert('B', 1);
+        m.insert('C', 2);
+        m.insert('D', 3);
+        m.insert('E', 4);
+        m.insert('F', 5);
+        m
+    };
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 struct State {
-    curr_val: u32,
-    next_val: u32,
+    curr_val: usize,
+    next_val: usize,
     slot: i32,
-    next_state: char,
+    next_state: usize,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Machine {
+    begin_state: usize,
+    steps_to_diag: usize,
+    instructions: Vec<(State, State)>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct MachineSimulator {
+    machine: Machine,
+    tape: Vec<usize>,
+    cursor: usize,
+    curr_state: usize,
+}
+
+impl MachineSimulator {
+    fn with_machine(machine: Machine) -> MachineSimulator {
+        MachineSimulator {
+            machine: machine,
+            tape: vec![0; 10_000],
+            cursor: 5_000,
+            curr_state: 0,
+        }
+    }
+
+    fn realloc_tape(&mut self) {
+        let old_size = self.tape.len();
+        let mut new_tape = vec![0; old_size * 2];
+        for i in self.tape.iter() {
+            new_tape[*i + old_size / 2] = self.tape[*i];
+        }
+        self.cursor = self.cursor + old_size / 2;
+        self.tape = new_tape;
+    }
+
+    fn simulate(&mut self) -> usize {
+        self.curr_state = self.machine.begin_state;
+        for _ in 0..self.machine.steps_to_diag {
+            self.realloc_tape();
+            if self.cursor <= 0 || self.cursor >= self.tape.len() {}
+            let state = if self.tape[self.cursor] == 0 {
+                self.machine.instructions[self.curr_state].0
+            } else {
+                self.machine.instructions[self.curr_state].1
+            };
+
+            // write the value under the cursor
+            self.tape[self.cursor] = state.next_val;
+            // move cursor to left or right
+            if state.slot > 0 {
+                self.cursor += 1;
+            } else {
+                self.cursor -= 1;
+            }
+
+            self.curr_state = state.next_state;
+        }
+        self.tape.iter().filter(|&&v| v == 1).count()
+    }
 }
 
 fn main() {
@@ -25,27 +102,29 @@ fn main() {
         Ok(n) => println!("Read {} bytes", n),
     }
 
-    let (begin_state, steps_to_diag, instructions) =
-        parse_instructions(input_txt.as_bytes()).unwrap().1;
-    println!("begin state: {:?}", begin_state);
-    println!("steps to diagnostic: {:?}", steps_to_diag);
-    println!("instructions: {:?}", instructions);
+    let machine = parse_instructions(input_txt.as_bytes()).unwrap().1;
+    let mut machine_simulator = MachineSimulator::with_machine(machine);
+    println!(
+        "Number of 1's after checksum: {}",
+        machine_simulator.simulate()
+    );
 }
 named!(
-    begin_state<char>,
-    do_parse!(tag!("Begin in state") >> space >> s: anychar >> anychar >> eol >> (s))
+    begin_state<usize>,
+    do_parse!(tag!("Begin in state") >> space >> s: anychar >> anychar >> eol >> (STATES[&s]))
 );
 named!(
     steps_to_diagnostic<u32>,
     do_parse!(
-        tag!("Perform a diagnostic checksum after") >> space >> s: anychar >> space >> tag!("steps")
-            >> anychar >> eol >> eol >> (s.to_digit(10).unwrap())
+        tag!("Perform a diagnostic checksum after") >> space >> s: map_res!(digit, str::from_utf8)
+            >> space >> tag!("steps") >> anychar >> eol >> eol
+            >> (s.parse::<u32>().unwrap())
     )
 );
 
 named!(
-    in_state<char>,
-    do_parse!(tag!("In state") >> space >> s: anychar >> anychar >> eol >> (s))
+    in_state<usize>,
+    do_parse!(tag!("In state") >> space >> s: anychar >> anychar >> eol >> (STATES[&s]))
 );
 
 named!(
@@ -74,10 +153,10 @@ named!(
 );
 
 named!(
-    next_state<char>,
+    next_state<usize>,
     do_parse!(
         tag!("    - Continue with state") >> space >> s: anychar >> char!('.')
-            >> opt!(complete!(eol)) >> (s)
+            >> opt!(complete!(eol)) >> (STATES[&s])
     )
 );
 
@@ -85,8 +164,8 @@ named!(
     one_state<State>,
     do_parse!(
         c: curr_value >> w: write_val >> m: move_cursor >> n: next_state >> (State {
-            curr_val: c,
-            next_val: w,
+            curr_val: c as usize,
+            next_val: w as usize,
             slot: m,
             next_state: n
         })
@@ -95,21 +174,24 @@ named!(
 
 named!(
     two_state<(State, State)>,
-    do_parse!(s1: one_state >> s2: one_state >> (s1, s2))
-);
-named!(
-    with_state<(char, (State, State))>,
-    do_parse!(s: in_state >> ts: two_state >> (s, ts))
+    do_parse!(in_state >> s1: one_state >> s2: one_state >> (s1, s2))
 );
 
 named!(
-    machine_instructions<Vec<(char, (State, State))>>,
-    separated_list_complete!(eol, with_state)
+    machine_instructions<Vec<(State, State)>>,
+    separated_list_complete!(eol, two_state)
 );
 
 named!(
-    parse_instructions<(char, u32, Vec<(char, (State, State))>)>,
-    do_parse!(b: begin_state >> s: steps_to_diagnostic >> mi: machine_instructions >> (b, s, mi))
+    parse_instructions<Machine>,
+    do_parse!(
+        b: dbg_dmp!(begin_state) >> s: dbg_dmp!(steps_to_diagnostic)
+            >> mi: dbg_dmp!(machine_instructions) >> (Machine {
+            begin_state: b,
+            steps_to_diag: s as usize,
+            instructions: mi,
+        })
+    )
 );
 
 #[cfg(test)]
@@ -120,7 +202,7 @@ mod test {
     fn test_begin_state() {
         assert_eq!(
             begin_state(b"Begin in state A.\n"),
-            IResult::Done(&b""[..], 'A')
+            IResult::Done(&b""[..], STATES[&'A'])
         );
     }
     #[test]
@@ -158,14 +240,14 @@ mod test {
     fn test_next_state() {
         assert_eq!(
             next_state(b"    - Continue with state B.\n"),
-            IResult::Done(&b""[..], 'B')
+            IResult::Done(&b""[..], STATES[&'B'])
         );
     }
     #[test]
     fn test_next_state_no_newline_at_the_end() {
         assert_eq!(
             next_state(b"    - Continue with state B."),
-            IResult::Done(&b""[..], 'B')
+            IResult::Done(&b""[..], STATES[&'B'])
         );
     }
 
@@ -186,7 +268,7 @@ mod test {
                     curr_val: 0,
                     next_val: 1,
                     slot: 1,
-                    next_state: 'B'
+                    next_state: STATES[&'B']
                 }
             )
         )
@@ -195,7 +277,8 @@ mod test {
     fn test_two_states() {
         assert_eq!(
             two_state(
-                r###"  If the current value is 0:
+                r###"In state A:
+  If the current value is 0:
     - Write the value 1.
     - Move one slot to the right.
     - Continue with state B.
@@ -213,56 +296,19 @@ mod test {
                         curr_val: 0,
                         next_val: 1,
                         slot: 1,
-                        next_state: 'B'
+                        next_state: 1
                     },
                     State {
                         curr_val: 1,
                         next_val: 0,
                         slot: -1,
-                        next_state: 'B'
+                        next_state: 1
                     }
                 )
             )
         )
     }
-    #[test]
-    fn test_in_state() {
-        assert_eq!(
-            with_state(
-                r###"In state A:
-  If the current value is 0:
-    - Write the value 1.
-    - Move one slot to the right.
-    - Continue with state B.
-  If the current value is 1:
-    - Write the value 0.
-    - Move one slot to the left.
-    - Continue with state B.
-"###
-                    .as_bytes(),
-            ),
-            IResult::Done(
-                &b""[..],
-                (
-                    'A',
-                    (
-                        State {
-                            curr_val: 0,
-                            next_val: 1,
-                            slot: 1,
-                            next_state: 'B'
-                        },
-                        State {
-                            curr_val: 1,
-                            next_val: 0,
-                            slot: -1,
-                            next_state: 'B'
-                        }
-                    )
-                )
-            )
-        )
-    }
+
     #[test]
     fn test_parse_instructions() {
         assert_eq!(
@@ -293,46 +339,40 @@ In state B:
             ),
             IResult::Done(
                 &b""[..],
-                (
-                    'A',
-                    6,
-                    vec![
+                Machine {
+                    begin_state: 0,
+                    steps_to_diag: 6,
+                    instructions: vec![
                         (
-                            'A',
-                            (
-                                State {
-                                    curr_val: 0,
-                                    next_val: 1,
-                                    slot: 1,
-                                    next_state: 'B',
-                                },
-                                State {
-                                    curr_val: 1,
-                                    next_val: 0,
-                                    slot: -1,
-                                    next_state: 'B',
-                                },
-                            ),
+                            State {
+                                curr_val: 0,
+                                next_val: 1,
+                                slot: 1,
+                                next_state: 1,
+                            },
+                            State {
+                                curr_val: 1,
+                                next_val: 0,
+                                slot: -1,
+                                next_state: 1,
+                            },
                         ),
                         (
-                            'B',
-                            (
-                                State {
-                                    curr_val: 0,
-                                    next_val: 1,
-                                    slot: -1,
-                                    next_state: 'A',
-                                },
-                                State {
-                                    curr_val: 1,
-                                    next_val: 1,
-                                    slot: 1,
-                                    next_state: 'A',
-                                },
-                            ),
+                            State {
+                                curr_val: 0,
+                                next_val: 1,
+                                slot: -1,
+                                next_state: 0,
+                            },
+                            State {
+                                curr_val: 1,
+                                next_val: 1,
+                                slot: 1,
+                                next_state: 0,
+                            },
                         ),
-                    ]
-                )
+                    ],
+                }
             )
         )
     }
