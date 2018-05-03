@@ -51,8 +51,8 @@ impl MachineSimulator {
     fn with_machine(machine: Machine) -> MachineSimulator {
         MachineSimulator {
             machine: machine,
-            tape: vec![0; 10_000],
-            cursor: 5_000,
+            tape: vec![0; 32],
+            cursor: 16,
             curr_state: 0,
         }
     }
@@ -60,18 +60,21 @@ impl MachineSimulator {
     fn realloc_tape(&mut self) {
         let old_size = self.tape.len();
         let mut new_tape = vec![0; old_size * 2];
-        for i in self.tape.iter() {
-            new_tape[*i + old_size / 2] = self.tape[*i];
+        let new_size = new_tape.len();
+        let offset = (new_size - old_size) / 2;
+        for (idx, i) in self.tape.iter().enumerate() {
+            new_tape[idx + offset] = *i;
         }
-        self.cursor = self.cursor + old_size / 2;
+        self.cursor = self.cursor + offset;
         self.tape = new_tape;
     }
 
-    fn simulate(&mut self) -> usize {
+    fn simulate(&mut self) -> usize {        
         self.curr_state = self.machine.begin_state;
-        for _ in 0..self.machine.steps_to_diag {
-            self.realloc_tape();
-            if self.cursor <= 0 || self.cursor >= self.tape.len() {}
+        for _ in 0..self.machine.steps_to_diag {                        
+            if self.cursor <= 0 || self.cursor >= self.tape.len() - 1 {
+                self.realloc_tape();
+            }
             let state = if self.tape[self.cursor] == 0 {
                 self.machine.instructions[self.curr_state].0
             } else {
@@ -88,6 +91,7 @@ impl MachineSimulator {
             }
 
             self.curr_state = state.next_state;
+            // println!("Self: {:?}", self);
         }
         self.tape.iter().filter(|&&v| v == 1).count()
     }
@@ -375,6 +379,28 @@ In state B:
                 }
             )
         )
+    }
+
+    #[test]
+    fn test_realloc_tape() {
+        let machine = Machine {
+            begin_state: 0,
+            steps_to_diag: 0,
+            instructions: vec![]
+        };
+
+        let mut machine_simulator = MachineSimulator{
+            machine: machine,
+            tape: vec![1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0,1,2],
+            cursor: 31,
+            curr_state: 0         
+        };
+
+        machine_simulator.realloc_tape();
+        println!("tape: {:?}", machine_simulator.tape);
+        assert_eq!(machine_simulator.cursor, 47);
+        assert_eq!(machine_simulator.tape.len(), 64);
+        assert_eq!(machine_simulator.tape, vec![0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
     }
 
 }
