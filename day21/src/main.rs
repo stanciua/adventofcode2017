@@ -277,6 +277,45 @@ mod test {
         );
     }
 
+    #[test]
+    fn test_image_to_2by2_sub_images() {
+        assert_eq!(
+            split_image_into_subimages(
+                &vec![
+                    vec!['1', '2', '3', '4'],
+                    vec!['1', '2', '3', '4'],
+                    vec!['1', '2', '3', '4'],
+                    vec!['1', '2', '3', '4'],
+                ],
+                2
+            ),
+            vec![
+                &['1', '2'],
+                &['1', '2'],
+                &['3', '4'],
+                &['3', '4'],
+                &['1', '2'],
+                &['1', '2'],
+                &['3', '4'],
+                &['3', '4'],
+            ]
+        )
+    }
+    #[test]
+    fn test_image_to_3by3_sub_images() {
+        assert_eq!(
+            split_image_into_subimages(
+                &vec![
+                    vec!['1', '2', '3'],
+                    vec!['1', '2', '3'],
+                    vec!['1', '2', '3'],
+                ],
+                3
+            ),
+            vec![&['1', '2', '3'], &['1', '2', '3'], &['1', '2', '3']]
+        )
+    }
+
 }
 
 fn rotate_clockwise_90_deg<T: Copy>(input: &mut [Vec<T>]) {
@@ -323,6 +362,9 @@ fn flip_lr<T: Copy>(matrix: &mut [Vec<T>]) {
 }
 
 fn match_rule_to_square(rule: &Vec<Vec<char>>, square: &Vec<Vec<char>>) -> bool {
+    if rule[0].len() != square[0].len() {
+        return false;
+    }
     if rule == square {
         return true;
     }
@@ -356,6 +398,68 @@ fn match_rule_to_square(rule: &Vec<Vec<char>>, square: &Vec<Vec<char>>) -> bool 
     if *rule == square_rotate {
         return true;
     }
-
     false
+}
+
+fn enhance_image(image: &mut Vec<Vec<char>>, rules: &Vec<Rule>, no_iterations: u32) {
+    let mut enhanced_size = image.len();
+    for iteration in 0.. {
+        let sub_images: Vec<Vec<char>>;
+        if enhanced_size % 2 == 0 {
+            sub_images = split_image_into_subimages(image, 2);
+        } else {
+            sub_images = split_image_into_subimages(image, 3);
+        }
+
+        let size = sub_images[0].len();
+        let squares = sub_images
+            .as_slice()
+            .chunks(size)
+            .map(|c| c.to_vec())
+            .map(|s| {
+                let rule = rules
+                    .iter()
+                    .find(|r| match_rule_to_square(&r.rule, &s))
+                    .unwrap();
+                rule.enhancement.clone()
+            })
+            .collect::<Vec<_>>();
+        enhanced_size += 2;
+    }
+}
+
+fn split_image_into_subimages<'a>(image: &'a Vec<Vec<char>>, dimension: usize) -> Vec<Vec<char>> {
+    let mut sub_images = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+    while i <= image.len() - 1 {
+        while j <= image[0].len() - 1 {
+            for d in 0..dimension {
+                sub_images.push((&image[i + d][j..j + dimension]).to_vec());
+            }
+            j += dimension;
+        }
+        i += dimension;
+        j = 0;
+    }
+    sub_images
+}
+// 1 2 3 4
+// 1 2 3 4
+// 1 2 3 4
+// 1 2 3 4
+fn assemble_sub_images_into_image(
+    sub_images: &Vec<Vec<char>>,
+    enhanced_size: usize,
+) -> Vec<Vec<char>> {
+    // let mut image = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+
+    // while i <= enhanced_size - 1 {
+    //     while j <= enhanced_size - 1 {
+    //         for d in 0..sub_images[0].len() {}
+    //     }
+    // }
+    vec![vec!['a']]
 }
