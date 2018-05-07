@@ -8,3 +8,10 @@ authors = ["Andrei Stanciu <andreistanciu.as@gmail.com>"]
 version = "*"
 features = ["nightly"]
 
+[profile.release]
+debug = true
+opt-level = 3
+lto = false
+
+
+

@@ -22,20 +22,21 @@ fn main() {
     }
 
     let mut initial_grid = vec![
-        vec!['.', '#', '.'],
-        vec!['.', '.', '#'],
-        vec!['#', '#', '#'],
+        vec![0,1,0],
+        vec![0,0,1],
+        vec![1,1,1],
     ];
+    let no_iterations = 18;
     let rules = rotate_and_flip_all_rules(rules);
-    enhance_image(&mut initial_grid, &rules, 18);
+    enhance_image(&mut initial_grid, &rules, no_iterations);
 
     println!(
         "Number of pixels that are on after {} iterations is: {}",
-        5,
+        no_iterations,
         initial_grid
             .into_iter()
             .flat_map(|v| v.into_iter())
-            .filter(|p| *p == '#')
+            .filter(|p| *p == 1)
             .count()
     );
 }
@@ -53,8 +54,8 @@ named!(
 );
 
 named!(
-    rule<(Vec<Vec<char>>, Vec<Vec<char>>)>,
-    do_parse!(p: pixels >> space >> tag!("=>") >> space >> r: pixels >> (p, r))
+    rule<(Vec<Vec<u8>>, Vec<Vec<u8>>)>,
+    do_parse!(p: pixels >> space >> tag!("=>") >> space >> r: pixels >> (p.iter().map(|v| v.iter().map(|e| if *e == '.' { 0 } else {1}).collect::<Vec<_>>()).collect::<Vec<_>>(), r.iter().map(|v| v.iter().map(|e| if *e == '.' { 0 } else {1}).collect::<Vec<_>>()).collect::<Vec<_>>()))
 );
 
 fn rotate_clockwise_90_deg<T: Copy>(input: &mut [Vec<T>]) {
@@ -100,8 +101,8 @@ fn flip_lr<T: Copy>(matrix: &mut [Vec<T>]) {
     }
 }
 fn rotate_and_flip_all_rules(
-    rules: Vec<(Vec<Vec<char>>, Vec<Vec<char>>)>,
-) -> HashMap<Vec<Vec<char>>, Vec<Vec<char>>> {
+    rules: Vec<(Vec<Vec<u8>>, Vec<Vec<u8>>)>,
+) -> HashMap<Vec<Vec<u8>>, Vec<Vec<u8>>> {
     let mut output = HashMap::new();
     for rule in rules {
         // first insert the rule from the input file
@@ -172,13 +173,13 @@ fn rotate_and_flip_all_rules(
 }
 
 fn enhance_image(
-    image: &mut Vec<Vec<char>>,
-    rules: &HashMap<Vec<Vec<char>>, Vec<Vec<char>>>,
+    image: &mut Vec<Vec<u8>>,
+    rules: &HashMap<Vec<Vec<u8>>, Vec<Vec<u8>>>,
     no_iterations: u32,
 ) {
-    let mut enhanced_size = image.len();
-    for _ in 0..no_iterations {
-        let sub_images: Vec<Vec<char>>;
+    let mut enhanced_size = image.len();    
+    for _ in 0..no_iterations {        
+        let sub_images: Vec<Vec<u8>>;
         if enhanced_size % 2 == 0 {
             sub_images = split_image_into_subimages(image, 2);
         } else {
@@ -197,7 +198,7 @@ fn enhance_image(
     }
 }
 
-fn get_enhanced_size(grid: &Vec<Vec<Vec<char>>>) -> usize {
+fn get_enhanced_size(grid: &Vec<Vec<Vec<u8>>>) -> usize {
     let no_elements = grid.len() * grid[0].len() * grid[0][0].len();
     for i in 1.. {
         if i * i == no_elements {
@@ -207,7 +208,7 @@ fn get_enhanced_size(grid: &Vec<Vec<Vec<char>>>) -> usize {
     0
 }
 
-fn split_image_into_subimages<'a>(image: &'a Vec<Vec<char>>, dimension: usize) -> Vec<Vec<char>> {
+fn split_image_into_subimages<'a>(image: &'a Vec<Vec<u8>>, dimension: usize) -> Vec<Vec<u8>> {
     let mut sub_images = Vec::new();
     let mut i = 0;
     let mut j = 0;
@@ -225,26 +226,29 @@ fn split_image_into_subimages<'a>(image: &'a Vec<Vec<char>>, dimension: usize) -
 }
 
 fn assemble_sub_images_into_image(
-    sub_images: &Vec<Vec<Vec<char>>>,
+    sub_images: &Vec<Vec<Vec<u8>>>,
     enhanced_size: usize,
-) -> Vec<Vec<char>> {
-    let mut image: Vec<Vec<char>> = vec![vec!['x'; enhanced_size]; enhanced_size];
-    for vv in sub_images {
-        let mut offset = (0, 0);
-        'outer: for r in 0..image.len() {
-            for c in 0..image[0].len() {
-                if image[r][c] == 'x' {
-                    offset.0 = r;
-                    offset.1 = c;
-                    break 'outer;
-                }
-            }
+) -> Vec<Vec<u8>> {
+    let mut image: Vec<Vec<u8>> = vec![vec![0; enhanced_size]; enhanced_size];
+    let mut offset = (0, 0);
+    for vv in sub_images {        
+        for r in 0..vv.len() {            
+            for c in 0..vv[0].len() {                
+                image[r + offset.0][c + offset.1] = vv[r][c];                
+            }            
+        }        
+
+        offset.0 += vv.len();
+        offset.1 += vv.len();
+
+        if offset.0 == enhanced_size && offset.1 == enhanced_size {            
+            return image;
         }
 
-        for r in 0..vv.len() {
-            for c in 0..vv[0].len() {
-                image[r + offset.0][c + offset.1] = vv[r][c];
-            }
+        if offset.1 != enhanced_size {            
+            offset.0 -= vv.len();
+        } else {
+            offset.1 = 0;
         }
     }
     image
