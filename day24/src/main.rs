@@ -1,14 +1,14 @@
 extern crate petgraph;
 
-use std::fs::File;
-use std::io::Read;
-use std::collections::{HashMap, HashSet};
+use petgraph::algo::*;
+use petgraph::dot::{Config, Dot};
 use petgraph::graph::Graph;
+use petgraph::graph::NodeIndex;
 use petgraph::visit::Dfs;
 use std::cmp::Ordering;
-use petgraph::dot::{Config, Dot};
-use petgraph::graph::NodeIndex;
-use petgraph::algo::*;
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::Read;
 
 fn main() {
     let path = "input.txt";
@@ -162,20 +162,62 @@ fn calculate_strength(
     //         });
     // }
 
+    let no_of_nodes = graph.node_indices().count();
+    let mut visited = vec![false; no_of_nodes];
+    let mut distances = vec![0; no_of_nodes];
+    let curr_sum = 0;
     let root = graph
         .node_indices()
         .find(|r| *graph.node_weight(*r).unwrap() == port)
         .unwrap();
     println!(
-        "{}",
-        "-----------------------------------------------------"
+        "processing graph with: {:?} nodes",
+        graph.node_indices().count()
     );
-    let mut dfs = Dfs::new(&graph, root);
-    let mut sum = 0;
-    while let Some(nx) = dfs.next(&graph) {
-        let weight = graph.node_weight(nx).unwrap();
-        sum += weight.0 + weight.1;
+    get_longest_path(graph, root, curr_sum, &mut visited, &mut distances);
+    // println!(
+    //     "{}",
+    //     "-----------------------------------------------------"
+    // );
+    // let mut dfs = Dfs::new(&graph, root);
+    // let mut sum = 0;
+    // while let Some(nx) = dfs.next(&graph) {
+    //     let weight = graph.node_weight(nx).unwrap();
+    //     sum += weight.0 + weight.1;
+    // }
+
+    // sum
+    distances.into_iter().max().unwrap()
+}
+
+fn get_longest_path(
+    graph: &Graph<(i32, i32), (i32, i32), petgraph::Undirected>,
+    node: petgraph::graph::NodeIndex,
+    curr_sum: i32,
+    visited: &mut [bool],
+    distances: &mut [i32],
+) {
+    if visited[node.index()] {
+        return;
     }
 
-    sum
+    visited[node.index()] = true;
+    visited[0] = false;
+
+    let node_weight = graph.node_weight(node).unwrap();
+    if distances[node.index()] < curr_sum + node_weight.0 + node_weight.1 {
+        distances[node.index()] = curr_sum + node_weight.0 + node_weight.1;
+    }
+
+    let node_weight = graph.node_weight(node).unwrap();
+    for n in graph.neighbors(node) {
+        get_longest_path(
+            graph,
+            n,
+            curr_sum + node_weight.0 + node_weight.1,
+            visited,
+            distances,
+        )
+    }
+    visited[node.index()] = false;
 }
