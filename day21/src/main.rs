@@ -7,6 +7,9 @@ use std::fs::File;
 use std::io::Read;
 use std::str;
 
+#[derive(Debug, Eq, PartialEq)]
+struct Rule(Vec<Vec<u8>>, Vec<Vec<u8>>);
+
 fn main() {
     let path = "input.txt";
     let mut input = File::open(path).expect("Unable to open file!");
@@ -54,8 +57,8 @@ named!(
 );
 
 named!(
-    rule<(Vec<Vec<u8>>, Vec<Vec<u8>>)>,
-    do_parse!(p: pixels >> space >> tag!("=>") >> space >> r: pixels >> (p.iter().map(|v| v.iter().map(|e| if *e == '.' { 0 } else {1}).collect::<Vec<_>>()).collect::<Vec<_>>(), r.iter().map(|v| v.iter().map(|e| if *e == '.' { 0 } else {1}).collect::<Vec<_>>()).collect::<Vec<_>>()))
+    rule<Rule>,
+    do_parse!(p: pixels >> space >> tag!("=>") >> space >> r: pixels >> (Rule (p.iter().map(|v| v.iter().map(|e| if *e == '.' { 0 } else {1}).collect::<Vec<_>>()).collect::<Vec<_>>(), r.iter().map(|v| v.iter().map(|e| if *e == '.' { 0 } else {1}).collect::<Vec<_>>()).collect::<Vec<_>>())))
 );
 
 fn rotate_clockwise_90_deg<T: Copy>(input: &mut [Vec<T>]) {
@@ -84,7 +87,7 @@ fn flip_ud<T: Copy>(matrix: &mut [Vec<T>]) {
         for i in 0..row_lgth {
             let tmp = matrix[idx][i];
             matrix[idx][i] = matrix[lgth - idx - 1][i];
-            matrix[lgth - idx - 1][i] = tmp;
+            matrix[lgth - idx - 1][i] = tmp;            
         }
     }
 }
@@ -92,16 +95,13 @@ fn flip_ud<T: Copy>(matrix: &mut [Vec<T>]) {
 fn flip_lr<T: Copy>(matrix: &mut [Vec<T>]) {
     let lgth = matrix.len();
     for idx in 0..lgth / 2 {
-        let row_lgth = matrix.len();
-        for i in 0..row_lgth {
-            let tmp = matrix[i][idx];
-            matrix[i][idx] = matrix[i][lgth - idx - 1];
-            matrix[i][lgth - idx - 1] = tmp;
+        for v in matrix.iter_mut() {
+            v.swap(idx, lgth - idx - 1);
         }
     }
 }
 fn rotate_and_flip_all_rules(
-    rules: Vec<(Vec<Vec<u8>>, Vec<Vec<u8>>)>,
+    rules: Vec<Rule>,
 ) -> HashMap<Vec<Vec<u8>>, Vec<Vec<u8>>> {
     let mut output = HashMap::new();
     for rule in rules {
@@ -179,12 +179,12 @@ fn enhance_image(
 ) {
     let mut enhanced_size = image.len();    
     for _ in 0..no_iterations {        
-        let sub_images: Vec<Vec<u8>>;
+        let sub_images = 
         if enhanced_size % 2 == 0 {
-            sub_images = split_image_into_subimages(image, 2);
+            split_image_into_subimages(image, 2)
         } else {
-            sub_images = split_image_into_subimages(image, 3);
-        }
+            split_image_into_subimages(image, 3)
+        };
 
         let size = sub_images[0].len();
         let squares = sub_images
@@ -198,7 +198,7 @@ fn enhance_image(
     }
 }
 
-fn get_enhanced_size(grid: &Vec<Vec<Vec<u8>>>) -> usize {
+fn get_enhanced_size(grid: &[Vec<Vec<u8>>]) -> usize {
     let no_elements = grid.len() * grid[0].len() * grid[0][0].len();
     for i in 1.. {
         if i * i == no_elements {
@@ -208,12 +208,12 @@ fn get_enhanced_size(grid: &Vec<Vec<Vec<u8>>>) -> usize {
     0
 }
 
-fn split_image_into_subimages<'a>(image: &'a Vec<Vec<u8>>, dimension: usize) -> Vec<Vec<u8>> {
+fn split_image_into_subimages(image: &[Vec<u8>], dimension: usize) -> Vec<Vec<u8>> {
     let mut sub_images = Vec::new();
     let mut i = 0;
     let mut j = 0;
-    while i <= image.len() - 1 {
-        while j <= image[0].len() - 1 {
+    while i < image.len() {
+        while j < image[0].len()  {
             for d in 0..dimension {
                 sub_images.push((&image[i + d][j..j + dimension]).to_vec());
             }
@@ -226,7 +226,7 @@ fn split_image_into_subimages<'a>(image: &'a Vec<Vec<u8>>, dimension: usize) -> 
 }
 
 fn assemble_sub_images_into_image(
-    sub_images: &Vec<Vec<Vec<u8>>>,
+    sub_images: &[Vec<Vec<u8>>],
     enhanced_size: usize,
 ) -> Vec<Vec<u8>> {
     let mut image: Vec<Vec<u8>> = vec![vec![0; enhanced_size]; enhanced_size];
