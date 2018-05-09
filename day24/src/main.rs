@@ -1,14 +1,14 @@
-extern crate petgraph;
-
-use petgraph::algo::*;
-use petgraph::dot::{Config, Dot};
-use petgraph::graph::Graph;
-use petgraph::graph::NodeIndex;
-use petgraph::visit::Dfs;
-use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+// Solution taken from a C++ solution found here: https://www.reddit.com/r/adventofcode/comments/7lte5z/2017_day_24_solutions/
+use std::cmp::Ord;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Component {
+    port1: u32,
+    port2: u32,
+}
 
 fn main() {
     let path = "input.txt";
@@ -22,202 +22,68 @@ fn main() {
     let mut ports = Vec::new();
     for line in input_txt.lines() {
         let p = line.split('/').collect::<Vec<_>>();
-        ports.push((p[0].parse::<i32>().unwrap(), p[1].parse::<i32>().unwrap()));
+        ports.push(Component {
+            port1: p[0].parse::<u32>().unwrap(),
+            port2: p[1].parse::<u32>().unwrap(),
+        });
     }
+    let mut max_overall_strength = 0;
+    let mut max_length = 0;
+    let mut max_strength_among_longest = 0;
+    let mut used_ports = ports.iter().map(|p| (*p, false)).collect::<HashMap<_, _>>();
+    calculate_strongest_bridge(
+        &ports,
+        &mut used_ports,
+        0,
+        0,
+        0,
+        &mut max_overall_strength,
+        &mut max_length,
+        &mut max_strength_among_longest,
+    );
 
-    let starting_ports_set = ports
-        .iter()
-        .cloned()
-        .filter(|v| v.0 == 0 || v.1 == 0)
-        .map(|v| if v.0 != 0 { (v.1, v.0) } else { v })
-        .collect::<Vec<_>>();
-    let mut remaining_ports = ports
-        .iter()
-        .cloned()
-        .filter(|v| v.0 != 0 && v.1 != 0)
-        .collect::<Vec<_>>();
-
-    // for each starting port try to calculate the strongest bridge
-    let mut strengths = Vec::new();
-    for port in starting_ports_set {
-        remaining_ports.insert(0, port);
-        // println!("{:?}", remaining_ports);
-        let mut graph = build_port_graph(&remaining_ports);
-        let root = graph
-            .node_indices()
-            .find(|r| *graph.node_weight(*r).unwrap() == port)
-            .unwrap();
-
-        let conn_comps = petgraph::algo::kosaraju_scc(&graph);
-        let mut to_be_removed_nodes = Vec::new();
-        for v in conn_comps {
-            if let Some(_) = v.iter().find(|n| **n == root) {
-                continue;
-            }
-            to_be_removed_nodes.extend(v);
-        }
-        let to_be_removed_nodes = to_be_removed_nodes
-            .into_iter()
-            .map(|n| *graph.node_weight(n).unwrap())
-            .collect::<Vec<_>>();
-
-        for n in to_be_removed_nodes {
-            let node_idx = graph
-                .node_indices()
-                .find(|node| *graph.node_weight(*node).unwrap() == n)
-                .unwrap();
-
-            graph.remove_node(node_idx);
-        }
-
-        // graph
-        //     .node_indices()
-        //     .inspect(|n| println!("{:?}", graph.node_weight(*n).unwrap()))
-        //     .collect::<Vec<_>>();
-
-        strengths.push(calculate_strength(port, &graph));
-        remaining_ports.remove(0);
-    }
-
-    println!("{:?}", strengths);
+    println!("Strongest bridge is: {:?}", max_overall_strength);
     println!(
-        "The strongest bridge is: {:?}",
-        strengths.iter().max().unwrap()
+        "Strongest bridge amont the longest is: {:?}",
+        max_strength_among_longest
     );
 }
 
-fn get_adjacent_list(port: (i32, i32), ports: &[(i32, i32)]) -> Vec<(i32, i32)> {
-    ports.iter().fold(Vec::new(), |mut acc, v| {
-        if port != *v && (port.0 == v.0 || port.1 == v.1 || port.0 == v.1 || port.1 == v.0) {
-            acc.push(*v);
-        }
-        acc
-    })
-}
-
-fn build_port_graph(ports: &[(i32, i32)]) -> Graph<(i32, i32), (i32, i32), petgraph::Undirected> {
-    let mut union = ports
-        .iter()
-        .cloned()
-        .map(|p| (p, get_adjacent_list(p, ports)))
-        .map(|(p, v)| v.into_iter().map(move |n| (p, n)).collect::<Vec<_>>())
-        .flat_map(|i| i.into_iter())
-        .map(|p| if p.0 > p.1 { (p.1, p.0) } else { p })
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-
-    union.sort_by(|a, b| {
-        let order = a.0.cmp(&b.0);
-        match order {
-            Ordering::Equal => a.1.cmp(&b.1),
-            _ => order,
-        }
-    });
-
-    let (node_idxs, mut graph) = ports.iter().fold(
-        (
-            HashMap::new(),
-            Graph::<(i32, i32), (i32, i32), petgraph::Undirected>::new_undirected(),
-        ),
-        |mut acc, v| {
-            let idx = acc.1.add_node(*v);
-            acc.0.entry(v).or_insert(idx);
-            acc
-        },
-    );
-
-    let edges = union
-        .iter()
-        .map(|&(n1, n2)| (node_idxs[&n1], node_idxs[&n2]))
-        .collect::<Vec<_>>();
-
-    graph.extend_with_edges(edges.as_slice());
-
-    graph
-}
-
-fn calculate_strength(
-    port: (i32, i32),
-    graph: &Graph<(i32, i32), (i32, i32), petgraph::Undirected>,
-) -> i32 {
-    // println!("{:?}", Dot::with_config(&graph, &[Config::EdgeNoLabel]));
-    // println!("{:?}", graph);
-    // println!("{:?}", is_cyclic_directed(&graph));
-    // if let Ok(v) = toposort(graph, None) {
-    //     v.into_iter()
-    //         .inspect(|v| println!("{:?}", graph.node_weight(*v)))
-    //         .collect::<Vec<_>>();
-    // get the position of node 0 in topological order
-    // if let Some(pos) = v.iter()
-    //     .position(|n| if n.index() == 0 { true } else { false })
-    // {
-    //     return v.into_iter()
-    //         .skip(pos)
-    //         .inspect(|&n| println!("{:?} -> {:?}", n, graph.node_weight(n)))
-    //         .fold(0, |mut acc, n| {
-    //             let weight = graph.node_weight(n).unwrap();
-    //             acc += weight.0 + weight.1;
-    //             acc
-    //         });
-    // }
-
-    let no_of_nodes = graph.node_indices().count();
-    let mut visited = vec![false; no_of_nodes];
-    let mut distances = vec![0; no_of_nodes];
-    let curr_sum = 0;
-    let root = graph
-        .node_indices()
-        .find(|r| *graph.node_weight(*r).unwrap() == port)
-        .unwrap();
-    println!(
-        "processing graph with: {:?} nodes",
-        graph.node_indices().count()
-    );
-    get_longest_path(graph, root, curr_sum, &mut visited, &mut distances);
-    // println!(
-    //     "{}",
-    //     "-----------------------------------------------------"
-    // );
-    // let mut dfs = Dfs::new(&graph, root);
-    // let mut sum = 0;
-    // while let Some(nx) = dfs.next(&graph) {
-    //     let weight = graph.node_weight(nx).unwrap();
-    //     sum += weight.0 + weight.1;
-    // }
-
-    // sum
-    distances.into_iter().max().unwrap()
-}
-
-fn get_longest_path(
-    graph: &Graph<(i32, i32), (i32, i32), petgraph::Undirected>,
-    node: petgraph::graph::NodeIndex,
-    curr_sum: i32,
-    visited: &mut [bool],
-    distances: &mut [i32],
+fn calculate_strongest_bridge(
+    ports: &[Component],
+    used_ports: &mut HashMap<Component, bool>,
+    port: u32,
+    length: u32,
+    strength: u32,
+    max_overall_strength: &mut u32,
+    max_length: &mut u32,
+    max_strength_among_longest: &mut u32,
 ) {
-    if visited[node.index()] {
-        return;
+    *max_overall_strength = strength.max(*max_overall_strength);
+    *max_length = length.max(*max_length);
+
+    if length == *max_length {
+        *max_strength_among_longest = strength.max(*max_strength_among_longest);
     }
 
-    visited[node.index()] = true;
-    visited[0] = false;
-
-    let node_weight = graph.node_weight(node).unwrap();
-    if distances[node.index()] < curr_sum + node_weight.0 + node_weight.1 {
-        distances[node.index()] = curr_sum + node_weight.0 + node_weight.1;
+    for p in ports {
+        if !used_ports[p] && (p.port1 == port || p.port2 == port) {
+            *used_ports.entry(*p).or_insert(true) = true;
+            calculate_strongest_bridge(
+                ports,
+                used_ports,
+                if p.port1 == port {
+                    p.port2
+                } else {
+                    p.port1
+                },
+                length + 1,
+                strength + p.port1 + p.port2,
+                max_overall_strength,
+                max_length,
+                max_strength_among_longest,
+            );
+            *used_ports.entry(*p).or_insert(false) = false;
+        }
     }
-
-    let node_weight = graph.node_weight(node).unwrap();
-    for n in graph.neighbors(node) {
-        get_longest_path(
-            graph,
-            n,
-            curr_sum + node_weight.0 + node_weight.1,
-            visited,
-            distances,
-        )
-    }
-    visited[node.index()] = false;
 }
